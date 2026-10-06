@@ -63,7 +63,10 @@ export function registerCarrierRoutes(app,db,{project,units,unitById,event,fail,
         if(old[f]!==value)update[f]=value;
       }
       const e=validateUnit({...old,...update});if(e)fail(`${vin}: ${e}`);
-      return {old,update,group:body.groupLoads?text(r.group??'',100):'',reference:body.groupLoads?text(r.load_reference??'',100):''};
+      const action=body.groupLoads?text(r.load_action??'',20):'';
+      if(action&&!['pool'].includes(action))fail(`${vin}: choose a load group or the unassigned pool.`);
+      if(action&&(r.group||r.load_reference))fail(`${vin}: a vehicle cannot be in a load group and the unassigned pool.`);
+      return {old,update,action,group:body.groupLoads?text(r.group??'',100):'',reference:body.groupLoads?text(r.load_reference??'',100):''};
     });
     const grouped=new Map();
     for(const r of planned){
@@ -110,17 +113,23 @@ export function registerCarrierRoutes(app,db,{project,units,unitById,event,fail,
       const l=loads.find(l=>l.id===g.loadId);
       const count=saved.filter(u=>{
         const r=planned.find(r=>r.old.id===u.id);
-        return (r?.loadGroup?r.loadGroup.loadId:u.load_id)===g.loadId;
+        const releasing=r?.action==='pool'&&!['in_transit','delivered'].includes(status({...u,...r.update}));
+        return (r?.loadGroup?r.loadGroup.loadId:releasing?null:u.load_id)===g.loadId;
       }).length;
-      if(count>l.capacity)fail(`Group ${g.reference} exceeds its capacity of ${l.capacity}. Increase its capacity in Load builds first.`);
+      if(count>500)fail(`Group ${g.reference} exceeds the maximum of 500 vehicles. Divide it into separate load groups.`);
+      if(count>l.capacity&&l.notes!=='Created from carrier sheet groups')fail(`Group ${g.reference} exceeds its capacity of ${l.capacity}. Increase its capacity in Load builds first.`);
     }
     const rows=planned.map(r=>{
-      const before=r.old.load_ref||'',after=r.loadGroup?.reference||before;
+      const protectedLoad=r.action==='pool'&&r.old.load_id&&['in_transit','delivered'].includes(status({...r.old,...r.update}));
+      const release=r.action==='pool'&&r.old.load_id&&!protectedLoad;
+      const before=r.old.load_ref||'',after=r.loadGroup?.reference||(release?'':before);
+      r.release=release;
+      const finalUnit={...r.old,...r.update,load_id:r.loadGroup?'proposed':release?null:r.old.load_id,load_ref:after||null};
       const changes=Object.entries(r.update).map(([field,after])=>({field,before:r.old[field]||'',after}));
       if(before!==after)changes.push({field:'load',before,after});
-      return {vin:r.old.vin,unitId:r.old.id,changes,beforeStatus:status(r.old),afterStatus:status({...r.old,...r.update,load_id:r.loadGroup?true:r.old.load_id}),loadBefore:before,loadAfter:after};
+      return {vin:r.old.vin,unitId:r.old.id,unit:finalUnit,changes,beforeStatus:status(r.old),afterStatus:status(finalUnit),loadBefore:before,loadAfter:after,notice:protectedLoad?'Existing departed/delivered load retained.':'',classification:after?'load':'pool'};
     });
-    return {planned,groups,rows,snapshot,counts:{matched:rows.length,changed:rows.filter(r=>r.changes.length).length,unchanged:rows.filter(r=>!r.changes.length).length,loadsCreated:groups.filter(g=>g.new).length,loadMoves:rows.filter(r=>r.loadBefore&&r.loadBefore!==r.loadAfter).length}};
+    return {planned,groups,rows,snapshot,counts:{matched:rows.length,changed:rows.filter(r=>r.changes.length).length,unchanged:rows.filter(r=>!r.changes.length).length,loadsCreated:groups.filter(g=>g.new).length,loadMoves:rows.filter(r=>r.loadBefore&&r.loadAfter&&r.loadBefore!==r.loadAfter).length,loadsReleased:rows.filter(r=>r.loadBefore&&!r.loadAfter).length,built:rows.filter(r=>r.loadAfter).length,pool:rows.filter(r=>!r.loadAfter).length}};
   }
   app.post('/api/projects/:p/carriers/:id/updates/preview',(req,res)=>{
     const p=project(req.params.p).id,c=carrierById(p,req.params.id),result=plan(p,c,req.body);
@@ -144,6 +153,7 @@ export function registerCarrierRoutes(app,db,{project,units,unitById,event,fail,
         const r=planned[i];
         if(!rows[i].changes.length)continue;
         if(r.loadGroup)r.update.load_id=r.loadGroup.loadId;
+        else if(r.release)r.update.load_id=null;
         const entries=Object.entries(r.update);
         db.prepare(`UPDATE units SET ${entries.map(([f])=>`${f}=?`).join(',')},updated_at=? WHERE id=?`).run(...entries.map(([,v])=>v),t,r.old.id);
         if(r.old.load_id)affectedLoads.add(r.old.load_id);if(r.loadGroup)affectedLoads.add(r.loadGroup.loadId);
@@ -154,6 +164,9 @@ export function registerCarrierRoutes(app,db,{project,units,unitById,event,fail,
         const members=db.prepare('SELECT * FROM units WHERE load_id=?').all(id);
         if(!members.length)continue;
         db.prepare(`UPDATE loads SET ${summaryFields.map(f=>`${f}=?`).join(',')} WHERE id=?`).run(...summaryFields.map(f=>common(members,f)),id);
+        // Automatically inferred groups follow their actual membership. Manual load
+        // capacities remain explicit and are enforced in the planner above.
+        db.prepare("UPDATE loads SET capacity=? WHERE id=? AND notes='Created from carrier sheet groups'").run(members.length,id);
       }
       db.prepare('INSERT INTO carrier_updates VALUES(?,?,?,?,?,?,?)').run(randomUUID(),p,c.id,counts.matched,counts.changed,counts.loadsCreated,t);
       event(p,null,`${c.name} sheet checked: ${counts.changed} changed of ${counts.matched} VINs; ${counts.loadsCreated} new loads`);

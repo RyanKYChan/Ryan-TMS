@@ -143,3 +143,24 @@ test('Carrier paste blocks unassigned VINs and a new carrier can be added withou
   await page.getByRole('button',{name:'Open Known Carrier',exact:true}).click();await page.getByRole('button',{name:'Paste sheet update'}).click();await page.getByLabel('Paste carrier sheet').fill('VIN\tETA\nLSFAM11A1RA000002\t13/10/2026');await expect(page.getByRole('alert')).toContainText('Not in the packing list');await expect(page.getByRole('button',{name:'Review changes'})).toBeDisabled();await page.getByRole('button',{name:'Close dialog'}).click();
   const w=await (await page.request.get(`/api/projects/${p}/workspace`)).json();expect(w.carriers).toHaveLength(2);expect(w.units).toHaveLength(1);
 });
+
+test('Load builds chooses a carrier and repeatedly reads a full 200-VIN sheet with twelve loads and an unbuilt remainder',async({page})=>{
+  test.setTimeout(60000);
+  const p=await page.getByLabel('Active project').inputValue(),vins=Array.from({length:200},(_,i)=>`LSFAM11A1RA${String(i+1).padStart(6,'0')}`);
+  await page.request.post(`/api/projects/${p}/import`,{data:{packingList:'Full source batch',rows:vins.map(vin=>({vin,carrier:'Valida',notes:'Keep original note'}))}});
+  await page.getByRole('button',{name:'Refresh workspace'}).click();await page.getByRole('button',{name:/^Load builds/}).click();
+  await page.getByRole('button',{name:/^Valida/}).click();await expect(page.getByRole('button',{name:'Paste full batch for Valida'})).toBeEnabled();
+  const header='Brand\tVIN\tModel\tAppointment #\tComments\tPOL-COUNTRY\tPOL-CITY\tPOL-ADDRESS\tPOD-COUNTRY\tPOD-CITY\tPOD-ADDRESS\tETD\tATD\tETA\tATA\tTruck plate\t\t';
+  const sheet=(built=72,actual=false)=>header+'\n'+vins.map((vin,i)=>(i>0&&i<built&&i%6===0?'\t\t\n':'')+['Geely',vin,'P145','','','Belgium','Antwerp','Port street','Belgium','Zeebrugge','Quay street',i<built?'2026/10/07':'',actual&&i<6?'2026/10/07 09:00':'',i<built?'2026/10/07 12:00':'',actual&&i<6?'2026/10/07 11:00':'',i<built?'TEST-01':'','',''].join('\t')).join('\n')+'\n'+'\t\t\n'.repeat(800);
+  await page.getByRole('button',{name:'Paste full batch for Valida'}).click();await page.getByLabel('Paste carrier sheet').fill(sheet());
+  await expect(page.getByRole('dialog').locator('.review-summary')).toContainText('12Detected loads');await expect(page.getByRole('dialog').locator('.review-summary')).toContainText('128Not load built');
+  await expect(page.getByRole('dialog').locator('.sheet-table tbody tr')).toHaveCount(200);await expect(page.getByRole('dialog').getByLabel('Appointment #',{exact:true})).toHaveValue('reference');
+  await page.getByRole('button',{name:'Review changes'}).click();await expect(page.locator('.proposed-load')).toHaveCount(12);await expect(page.getByRole('dialog').locator('.changes-table tbody tr')).toHaveCount(200);await expect(page.getByRole('dialog').locator('.review-summary')).toContainText('128Not load built');
+  await page.screenshot({path:'.local/screenshots/full-batch-review.png',fullPage:false});await page.getByRole('button',{name:'Apply update · 200 changed',exact:true}).click();await expect(page.getByRole('dialog')).toHaveCount(0);
+  await expect(page.locator('.all-loads .load-card')).toHaveCount(12);await expect(page.locator('.load-full-batch tbody tr')).toHaveCount(200);await expect(page.locator('.load-full-batch .sheet-tag.pool')).toHaveCount(128);
+  await page.screenshot({path:'.local/screenshots/load-build-carriers.png',fullPage:false});
+  await page.getByRole('button',{name:'Paste carrier sheet',exact:true}).click();await page.getByLabel('Paste carrier sheet').fill(sheet());await page.getByRole('button',{name:'Review changes'}).click();await expect(page.getByRole('button',{name:'Apply update · 0 changed',exact:true})).toBeEnabled();await page.getByRole('button',{name:'Apply update · 0 changed',exact:true}).click();await expect(page.getByRole('dialog')).toHaveCount(0);
+  await page.getByRole('button',{name:'Paste full batch for Valida'}).click();await page.getByLabel('Paste carrier sheet').fill(sheet(78,true));await page.getByRole('button',{name:'Review changes'}).click();await expect(page.getByRole('dialog').locator('.review-summary')).toContainText('1New load builds');await expect(page.getByRole('dialog').locator('.review-summary')).toContainText('122Not load built');await page.getByRole('button',{name:'Apply update · 12 changed',exact:true}).click();await expect(page.getByRole('dialog')).toHaveCount(0);
+  const w=await (await page.request.get(`/api/projects/${p}/workspace`)).json();expect(w.units).toHaveLength(200);expect(w.loads).toHaveLength(13);expect(w.units.filter(u=>!u.load_id)).toHaveLength(122);expect(w.units.filter(u=>u.status==='delivered')).toHaveLength(6);expect(w.units.every(u=>u.notes==='Keep original note'&&u.packing_list==='Full source batch')).toBe(true);
+  await page.setViewportSize({width:390,height:844});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
+});

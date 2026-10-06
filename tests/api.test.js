@@ -180,3 +180,29 @@ test('A later gap can establish missing load membership without losing recorded 
   const r=await f.apply({groupLoads:true,rows:[{vin:vin(1),group:'0'},{vin:vin(2),group:'1'}]});assert.equal(r.status,200);assert.equal(r.data.loadsCreated,2);
   const w=await f.workspace();assert.ok(w.units[0].load_id);assert.equal(w.units[0].status,'delivered');assert.equal(w.units[0].ata,'2026-10-13T07:00:00Z');
 });
+
+test('A full sheet repairs an old oversized remainder load, keeps planned loads stable, and tracks pool-to-load changes',async t=>{
+  const f=await carrierFixture(t,20);
+  // Simulate the previous version interpreting the whole final remainder as a load.
+  await f.apply({groupLoads:true,rows:Array.from({length:20},(_,i)=>({vin:vin(i+1),group:i<6?'0':'1',etd:i<12?'2026-10-07T06:00:00Z':''}))});
+  let w=await f.workspace();const first=w.units[0].load_id,last=w.units[6].load_id;
+  const body={groupLoads:true,rows:Array.from({length:20},(_,i)=>i<12?{vin:vin(i+1),group:i<6?'0':'1'}:{vin:vin(i+1),load_action:'pool'})};
+  const r=await f.apply(body);assert.equal(r.status,200);assert.equal(r.data.built,12);assert.equal(r.data.pool,8);assert.equal(r.data.loadsReleased,8);
+  w=await f.workspace();assert.ok(w.units.slice(12).every(u=>!u.load_id&&u.status==='unscheduled'));assert.equal(w.units[0].load_id,first);assert.equal(w.units[6].load_id,last);assert.equal(w.loads.find(l=>l.id===last).capacity,6);
+  assert.equal((await f.apply(body)).data.changed,0);
+  const next={...body,rows:body.rows.map((r,i)=>i>=12&&i<18?{vin:r.vin,group:'2',etd:'2026-10-08T06:00:00Z',eta:'2026-10-08T08:00:00Z'}:r)};
+  assert.equal((await f.apply(next)).data.loadsCreated,1);assert.equal((await f.workspace()).units.filter(u=>!u.load_id).length,2);assert.equal((await f.apply(next)).data.changed,0);
+});
+
+test('Returning a planned VIN to the pool preserves its dates and carrier; actual loads remain protected',async t=>{
+  const f=await carrierFixture(t,2);await f.apply({groupLoads:true,rows:[{vin:vin(1),group:'0',etd:'2026-10-07T06:00:00Z'},{vin:vin(2),group:'1',atd:'2026-10-07T07:00:00Z'}]});
+  const r=await f.apply({groupLoads:true,rows:[{vin:vin(1),load_action:'pool'},{vin:vin(2),load_action:'pool',eta:'2026-10-07T10:00:00Z'}]});
+  assert.equal(r.status,200);assert.equal(r.data.loadsReleased,1);assert.equal(r.data.pool,1);const w=await f.workspace();assert.equal(w.units[0].load_id,null);assert.equal(w.units[0].etd,'2026-10-07T06:00:00Z');assert.equal(w.units[0].carrier,'Carrier A');assert.ok(w.units[1].load_id);assert.equal(w.units[1].eta,'2026-10-07T10:00:00Z');
+});
+
+test('A partial paste cannot grow an inferred load beyond the 500-VIN limit',async t=>{
+  const f=await carrierFixture(t,501);
+  await f.apply({groupLoads:true,rows:Array.from({length:500},(_,i)=>({vin:vin(i+1),group:'0'}))});
+  const r=await f.preview({groupLoads:true,rows:[{vin:vin(1),group:'0'},{vin:vin(501),group:'0'}]});assert.equal(r.status,400);assert.match(r.data.error,/maximum of 500/);
+  const w=await f.workspace();assert.equal(w.units.filter(u=>u.load_id).length,500);assert.equal(w.loads[0].capacity,500);
+});

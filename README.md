@@ -4,7 +4,7 @@ A mini TMS for vehicle spot transport and shunting, starting with a Maxus projec
 
 ## Open it on your Windows computer
 
-[Download the v0.3.0 Windows ZIP](https://github.com/RyanKYChan/Ryan-TMS/raw/refs/heads/main/downloads/ryan-tms-windows-v0.3.0.zip)
+[Download the v0.4.0 Windows ZIP](https://github.com/RyanKYChan/Ryan-TMS/raw/refs/heads/main/downloads/ryan-tms-windows-v0.4.0.zip)
 
 ChatGPT's cloud environment page does not expose the web app. The server must run on your own computer, or the app needs a separate hosted deployment. Opening the HTML files directly does not start the API.
 
@@ -14,7 +14,7 @@ The launcher can also be run using `npm run open` after dependencies and the pro
 
 ## Update an existing Windows installation
 
-Close the app's command window first. Make a backup copy of your existing `data` folder. Extract the new ZIP into the same parent folder so its `Ryan-TMS` folder merges with your current `Ryan-TMS` folder; replace application files when prompted. **Do not delete the old folder or its `data` directory.** The ZIP contains no database or `data` folder, so merging it does not replace your existing packing lists. Start `START-TMS.cmd` again and refresh Edge. Version 0.3.0 appears in the footer. Existing packing lists, notes, dates, and load assignments are retained; the database gains carrier workspaces and saved packing-list order automatically.
+Close the app's command window first. Make a backup copy of your existing `data` folder. Extract the new ZIP into the same parent folder so its `Ryan-TMS` folder merges with your current `Ryan-TMS` folder; replace application files when prompted. **Do not delete the old folder or its `data` directory.** The ZIP contains no database or `data` folder, so merging it does not replace your existing packing lists. Start `START-TMS.cmd` again and refresh Edge. Version 0.4.0 appears in the footer. Existing packing lists, notes, dates, and load assignments are retained; the database gains carrier workspaces and saved packing-list order automatically.
 
 You can re-paste an existing packing list with its original name to fill previously missed columns. Matching VINs update in place rather than creating duplicates.
 
@@ -65,22 +65,29 @@ Use **Explore a sample project** to try the flow before real data arrives. Sampl
 
 Carrier allocation does not create a load or mark vehicles as planned. Vehicles on an existing load retain its carrier unless you change the load's carrier, or remove planned vehicles from that load first. VINs, packing lists, route details, notes, and milestones remain in place.
 
-## Check each carrier's sheet whenever it changes
+## Build loads by pasting the full carrier batch
 
-Open **Carriers**, then click the carrier's name or choose its workspace. All assigned VINs appear in packing-list order, including their load builds and ETD, ETA, ATD, ATA. **Copy VINs** copies that carrier's allocation for a new shared sheet. **Open register for selection / bulk edit** filters the main register to that carrier.
+1. Open **Load builds** and click the carrier, such as **Valida**. The app remembers your last carrier on this computer. All allocated VINs, built loads, and VINs not yet load built appear together.
+2. Click **Paste full batch for Valida** (or **Paste carrier sheet**). Copy the entire Google Sheets range including headers, blank gaps, and the unassigned remainder.
+3. Check the full sheet preview: all nonempty source columns and all VINs are shown. Empty trailing rows and columns are ignored. `Appointment #` maps to the vehicle reference.
+4. Check **Detected loads** and **Not load built**. Gaps close load groups. The final unbroken list without planning details remains unassigned to a load. If a dated/trucked prefix runs directly into that remainder, the prefix is detected as the last load. You can change any detected section between **Load build** and **Unassigned to a load** before reviewing.
+5. Click **Review changes**. Check new/reused loads, changed fields, and any planned VINs returning to the unassigned remainder, then **Apply update**. Use **Show changed VINs only** for a focused comparison; every resulting field is available by scrolling the table horizontally.
+6. Whenever the sheet changes, paste the same full batch again. Existing VINs and unchanged loads are reused. New gaps and dates update planning and movement progress; a check with no changes is recorded too.
 
-Click **Paste sheet update**, copy the carrier's Google Sheets cells including headers, and paste. Generic packing-list fields are supported, plus `Load`, `Load ID`, `Load reference`, `Loadbuild`, and `Trip number`. Check the column mapping and date format, then **Review changes**. The preview shows each changed value, resulting status, and proposed load group. **Apply update** saves the reviewed changes.
+For a sheet with twelve dated/trucked groups of six VINs followed by 128 unplanned VINs, the result is **12 loads / 72 VINs on loads / 128 not load built**. The unassigned remainder never becomes a single 128-VIN load. A sheet with no gaps or load references stays unbuilt by default; dates can still be updated, and section treatment can be overridden.
 
-- The paste matches existing VINs in this project and carrier; it does not create vehicles or move them to a new packing list. Unknown VINs and VINs assigned to another carrier are flagged before applying. Import or assign them first.
-- Blank cells preserve saved values. VINs absent from a paste keep their saved details and carrier allocation. Use vehicle details or bulk edit to explicitly clear a value.
-- A `Load` reference groups matching rows. If only the first row of a load has its reference, the reference fills down until another reference or a blank-row gap.
-- Copy blank rows too: when gaps separate groups, **Apply load groups** proposes a load per group. Load names are generated when references are missing. Disable this checkbox to update dates and details while retaining saved load membership.
-- Repeating the same groups reuses existing loads. A partial update can reuse one existing load; changing gaps can split or merge planned groups. The preview lists affected VINs and load moves. Empty old load records remain available as history.
-- Departed or delivered VINs retain any existing load. Gaps can establish a missing load when actual milestones were recorded before the load was known. Actual dates are never cleared by a blank paste.
-- All rows are validated before saving. If saved data changes after preview, review the paste again. Existing load capacity and carrier ownership are checked. New groups have capacity equal to their pasted vehicle count, up to 500.
-- The overview and **Carriers** show progress across all carriers, milestone coverage, and the latest sheet check. **Sheet checks** records each paste, including checks with zero changes. Individual changes are also recorded in the project activity log.
+**Sync planned load membership from this full sheet** is enabled by default. When a planned VIN returns to the unassigned remainder, the preview proposes removing it from its load while keeping its dates and carrier. Departed/delivered load assignments are retained, even if those VINs are pasted in the unassigned section. Turn off membership sync for a partial or dates-only paste that should retain all existing load assignments. VINs absent from a paste keep their saved state.
 
-The app updates when you paste and apply; checking a Google Sheet remains a manual step. The [carrier sheet template](templates/carrier-sheet.tsv) supplies a header row for carrier planning.
+- Paste updates only VINs already imported and allocated to the chosen carrier. Unknown VINs and VINs owned by another carrier are flagged. Import/assign them first.
+- Blank cells preserve saved values, including notes and actual dates. VIN identity, packing-list membership, and packing-list order are retained. Explicitly clear values through vehicle details or bulk edit when needed.
+- Optional `Load`, `Load ID`, `Load reference`, `Loadbuild`, and `Trip number` columns group rows by reference. A reference entered only on the first row fills down until the next reference or gap.
+- Repeating the same groups reuses saved loads. Changed groups can split or merge planned loads. Departed or delivered VINs keep an existing load; a missing load can still be established after actual dates were recorded.
+- Inferred sheet loads follow their actual group sizes, up to 500 vehicles. Manually created load capacities remain enforced. Carrier ownership, every row, and milestone chronology are validated before applying. If saved data changes after preview, review the paste again.
+- Empty old loads remain as history and are hidden by default in **Load builds**. Enable **Include empty load history** to see them. **New load** still supports manual planning.
+
+**Carriers** remains available for allocation, copying VINs, milestone coverage, and sheet check history. Its paste area uses the same full-sheet rules. **Load builds** displays the whole selected carrier batch with brand/model, reference/appointment, comments, POL/POD details, truck plate, and ETD/ATD/ETA/ATA. The overview and carrier comparison include progress and the not-load-built count.
+
+Google Sheets checks remain manual copy/paste. The [carrier sheet template](templates/carrier-sheet.tsv) supplies a reusable header row.
 
 ## Sheet columns
 
@@ -88,7 +95,7 @@ The header-only [packing list template](templates/packing-list.tsv) can be paste
 
 | Your header | Stored field |
 | --- | --- |
-| Brand, VIN, Model, Reference | Vehicle identity and reference |
+| Brand, VIN, Model, Reference / Appointment # | Vehicle identity and reference |
 | Status | Original sheet status |
 | Comments, Port Comment | Combined comments, separated by a newline |
 | POL-COUNTRY, POL-CTY / POL-CITY, POL-ZIPCODE, POL-ADDRESS | Loading country, city, postcode, address |
@@ -113,7 +120,7 @@ Dates accept `YYYY-MM-DD`, `DD/MM/YYYY` (default), or `MM/DD/YYYY` when selected
 - Operational status is inferred: ATA means **Delivered**, ATD means **In transit**, a load or ETD means **Scheduled**. Recognised sheet statuses (Delivered/Completed, In transit/Departed/Loaded, Scheduled/Planned) are used when actual dates are absent. Unknown sheet statuses are retained for reference. Delivered vehicles without ATA remain visible and are counted as missing actual arrival.
 - A unit can be assigned to one current load. Capacity, project ownership, duplicate selections, and already departed/delivered units are checked by the API.
 - Assignment copies the load route, planned dates, carrier, and truck to the unit. Updating a load synchronises those fields to all its assigned units. Address details, comments, prices, T1, and actual dates stay with the unit.
-- Removing a unit from a load clears ETD and ETA. Departed/delivered units cannot be removed until their status and actual dates are corrected individually.
+- The manual **Remove from load** action clears ETD and ETA. A full-sheet update returning planned units to the pool keeps their saved dates. Departed/delivered loads are protected in both flows.
 - Overdue means ETA has passed and the unit is not delivered.
 - CSV exports include all project units and fields. Potential spreadsheet formulas in text are escaped.
 

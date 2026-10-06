@@ -15,7 +15,7 @@ const aliases={
 };
 Object.assign(aliases,{
   vinnumber:'vin',vinno:'vin',vinnr:'vin',vin17:'vin',vehiclevin:'vin',chassisno:'vin',chassisnr:'vin',chassisid:'vin',chassisvin:'vin',vehiclenumber:'vin',
-  vehiclebrand:'brand',vehiclemake:'brand',vehiclemodel:'model',modelname:'model',modeldescription:'model',bookingreference:'reference',customerreference:'reference',referencenumber:'reference',
+  vehiclebrand:'brand',vehiclemake:'brand',vehiclemodel:'model',modelname:'model',modeldescription:'model',bookingreference:'reference',customerreference:'reference',referencenumber:'reference',appointment:'reference',appointmentnumber:'reference',appointmentno:'reference',
   vehiclestatus:'source_status',transportstatus:'source_status',shipmentstatus:'source_status',remarks:'notes',remark:'notes',portremarks:'notes',portnotes:'notes',commentsportcomment:'notes',
   pol:'origin',pod:'destination',portofloading:'origin',portofdischarge:'destination',loadingport:'origin',deliverycity:'destination',loadingcity:'origin',pickupcity:'origin',collectioncity:'origin',dischargeport:'destination',
   loadingcountry:'pol_country',origincountry:'pol_country',pickupcountry:'pol_country',collectioncountry:'pol_country',deliverycountry:'pod_country',destinationcountry:'pod_country',

@@ -1,4 +1,4 @@
-RYAN TMS v0.3.0 - Open the dashboard on your Windows computer
+RYAN TMS v0.4.0 - Open the dashboard on your Windows computer
 
 1. Install Node.js version 24 from https://nodejs.org if you do not have it.
 2. Extract the entire ZIP file to a folder on your computer.
@@ -10,7 +10,7 @@ RYAN TMS v0.3.0 - Open the dashboard on your Windows computer
 The dashboard includes:
 - Import units: paste VINs or rows copied from Google Sheets.
 - Packing lists: organise your imported vehicle manifests.
-- Load builds: create loads and assign vehicles.
+- Load builds: choose a carrier and paste its complete sheet batch.
 - Unit register: track ETD, ETA, ATD, ATA, T1 and your other sheet fields.
 - Explore a sample project: try clearly labelled demonstration data first.
 - Bulk edit: select vehicles in Unit register and edit shared fields together.
@@ -28,14 +28,18 @@ Extract this ZIP into the SAME parent folder so the Ryan-TMS folder merges
 with your existing Ryan-TMS folder. Replace application files when asked.
 DO NOT delete the old folder or its data directory first.
 This ZIP contains no data folder and does not replace your existing database.
-Start START-TMS.cmd again, refresh Edge, and check v0.3.0 in the footer.
+Start START-TMS.cmd again, refresh Edge, and check v0.4.0 in the footer.
 
 TO ASSIGN YOUR FIRST 200 VINS
 Open Unit register. Enter 200 under Select next, then Select 200 VINs.
 Click Assign to carrier, enter the carrier name, and Assign 200 vehicles.
 Repeat for the next carrier: allocated VINs are skipped by default.
-Open Carriers and select a carrier to paste their latest sheet update.
-Copy blank rows too when gaps represent load builds. Review before applying.
+Open Load builds, click the carrier, then Paste full batch for that carrier.
+Paste the entire sheet, including headers, load gaps and unassigned VINs.
+Separated load groups are recognised; the unassigned remainder stays unbuilt.
+Review changes, then Apply update. Repeating a paste reuses existing loads.
+Blank cells keep saved values. Departed/delivered load assignments are kept.
+Turn off membership sync for a dates-only or partial paste.
 
 To repair an earlier packing list import, re-paste it with the same name.
 Matching VINs update in place; you do not need to recreate the vehicles.

@@ -10,13 +10,16 @@ export function inspectCarrierGrid(raw,options={}){
     rows.push(row);groups.push(String(group));
   }
   const mapping=grid.headers.map((h,i)=>loadHeaders.has(normalizeHeader(h))?'load_reference':grid.mapping[i]);
-  return {...grid,rows,groups,mapping,hasGaps:group>0};
+  // Sheets often include hundreds of empty rows and empty columns in the copied range.
+  // They are padding, not load boundaries or unmatched data columns.
+  const keep=grid.headers.map((h,i)=>i).filter(i=>!(grid.hasHeaders&&grid.headers[i]===`Column ${i+1}`&&rows.every(r=>!String(r[i]||'').trim())));
+  return {...grid,headers:keep.map(i=>grid.headers[i]),rows:rows.map(r=>keep.map(i=>r[i]||'')),groups,mapping:keep.map(i=>mapping[i]),hasGaps:group>0};
 }
-export function previewCarrierRows(grid,mapping,units,carrier,order='dmy',groupLoads=false){
+export function previewCarrierRows(grid,mapping,units,carrier,order='dmy',groupLoads=false,overrides={}){
   const preview=previewRows(grid.rows,mapping.map(f=>f==='load_reference'?'':f),units,order);
   const loadIndex=mapping.indexOf('load_reference');
   let previousGroup='',lastReference='';
-  return preview.map((r,i)=>{
+  const base=preview.map((r,i)=>{
     const old=units.find(u=>u.vin===r.unit.vin),errors=[...r.errors];
     if(!old)errors.push('Not in the packing list. Import this VIN first.');
     else if(String(old.carrier).toLowerCase()!==carrier.toLowerCase())errors.push(`Not assigned to ${carrier}. Assign it from the unit register first.`);
@@ -25,11 +28,27 @@ export function previewCarrierRows(grid,mapping,units,carrier,order='dmy',groupL
     if(group!==previousGroup){lastReference='';previousGroup=group;}
     const reference=loadIndex<0?'':String(grid.rows[i][loadIndex]||'').trim();
     if(reference)lastReference=reference;
-    const unit={...r.unit};
+    return {...r,unit:{...r.unit},errors,group,loadReference:lastReference};
+  });
+  const lastGroup=grid.groups.at(-1);
+  let previous='',run=0,previousPlanned=null;
+  return base.map(r=>{
+    const activity=['etd','eta','atd','ata','truck'].some(f=>r.unit[f])||['scheduled','planned','loaded','in transit','delivered','completed'].includes(String(r.unit.source_status||'').toLowerCase());
+    // Interior gaps close a load. The final unbroken remainder is the unbuilt pool;
+    // a dated/trucked prefix before that pool can still be the last load.
+    let classification=r.loadReference?'load':grid.hasGaps&&(r.group!==lastGroup||activity)?'load':'pool';
+    const boundary=`${r.group}:${r.loadReference}`;
+    if(boundary!==previous){run=0;previousPlanned=null;previous=boundary;}
+    if(r.group===lastGroup&&!r.loadReference&&previousPlanned!==null&&previousPlanned!==classification)run++;
+    previousPlanned=classification;
+    const section=r.loadReference?`ref:${r.loadReference.toLowerCase()}`:run?`${r.group}:${run}`:r.group;
+    classification=overrides[section]||classification;
     if(groupLoads){
-      if(lastReference)unit.load_reference=lastReference;
-      else if(grid.hasGaps)unit.group=group;
+      if(classification==='load'){
+        if(r.loadReference)r.unit.load_reference=r.loadReference;
+        else r.unit.group=section;
+      }else r.unit.load_action='pool';
     }
-    return {...r,unit,errors,group,loadReference:groupLoads?lastReference:''};
+    return {...r,group:section,section,classification:groupLoads?classification:'keep',loadReference:groupLoads?r.loadReference:''};
   });
 }
