@@ -93,9 +93,53 @@ test('A custom header mapping is remembered for the next packing list',async({pa
 test('Bulk editing all matching vehicles spans pages and preserves fields not selected',async({page})=>{
   const p=await page.getByLabel('Active project').inputValue();
   await page.request.post(`/api/projects/${p}/import`,{data:{packingList:'Bulk list',rows:Array.from({length:51},(_,i)=>({vin:`LSFAM11A1RA${String(i+1).padStart(6,'0')}`,origin:i===0?'Existing origin':'',notes:'Keep notes'}))}});
-  await page.getByRole('button',{name:'Refresh workspace'}).click();await page.getByRole('button',{name:/^Unit register/}).click();await page.getByRole('checkbox',{name:'Select this page'}).check();await page.getByRole('button',{name:'Select all 51 matching vehicles'}).click();await page.getByRole('button',{name:'Bulk edit',exact:true}).click();
+  await page.getByRole('button',{name:'Refresh workspace'}).click();await page.getByRole('button',{name:/^Unit register/}).click();await page.getByLabel('Rows per page').selectOption('50');await page.getByRole('checkbox',{name:'Select this page'}).check();await page.getByRole('button',{name:'Select all 51 matching vehicles'}).click();await page.getByRole('button',{name:'Bulk edit',exact:true}).click();
   await expect(page.getByRole('heading',{name:'Bulk edit 51 vehicles'})).toBeVisible();await page.getByLabel('Action 1').selectOption('fill');await page.getByLabel('Value 1').fill('Kallo');
   await page.getByRole('button',{name:'Add another field'}).click();await page.getByLabel('Field 2',{exact:true}).selectOption('destination');await page.getByLabel('Value 2',{exact:true}).fill('Zeebrugge');
   await expect(page.getByRole('button',{name:'Apply to 51 vehicles'})).toBeEnabled();await page.screenshot({path:'.local/screenshots/bulk-edit.png',fullPage:true});await page.getByRole('button',{name:'Apply to 51 vehicles'}).click();await expect(page.getByRole('dialog')).toHaveCount(0);
   const w=await (await page.request.get(`/api/projects/${p}/workspace`)).json();expect(w.units[0].origin).toBe('Existing origin');expect(w.units[50].origin).toBe('Kallo');expect(w.units.every(u=>u.destination==='Zeebrugge'&&u.notes==='Keep notes')).toBe(true);
+});
+
+test('400 VINs show on one page and batches of 200 assign to separate carrier workspaces in packing-list order',async({page})=>{
+  const browserErrors=[];page.on('pageerror',e=>browserErrors.push(e.message));
+  const p=await page.getByLabel('Active project').inputValue();
+  const rows=Array.from({length:400},(_,i)=>({vin:`LSFAM11A1RA${String(400-i).padStart(6,'0')}`,origin:'Kallo',destination:'Zeebrugge'}));
+  await page.request.post(`/api/projects/${p}/import`,{data:{packingList:'Original packing order',rows}});
+  await page.getByRole('button',{name:'Refresh workspace'}).click();await page.getByRole('button',{name:/^Unit register/}).click();
+  await expect(page.locator('tbody tr')).toHaveCount(200);await page.getByLabel('Rows per page').selectOption('all');await expect(page.locator('tbody tr')).toHaveCount(400);
+  await expect(page.locator('tbody .vin-link').first()).toHaveText(rows[0].vin);await expect(page.locator('tbody .vin-link').last()).toHaveText(rows[399].vin);
+  await page.getByLabel('Number of VINs to select').fill('200');await page.getByRole('button',{name:'Select 200 VINs',exact:true}).click();
+  await expect(page.locator('.row-selected')).toHaveCount(200);await page.getByRole('button',{name:'Assign to carrier',exact:true}).click();
+  await expect(page.getByRole('dialog')).toContainText(rows[0].vin);await expect(page.getByRole('dialog')).toContainText(rows[199].vin);
+  await page.getByLabel('Carrier name *',{exact:true}).fill('Carrier A');await page.getByRole('button',{name:'Assign 200 vehicles',exact:true}).click();await expect(page.getByRole('dialog')).toHaveCount(0);
+  await page.getByRole('button',{name:'Select 200 VINs',exact:true}).click();await expect(page.locator('.row-selected .vin-link').first()).toHaveText(rows[200].vin);
+  await page.getByRole('button',{name:'Assign to carrier',exact:true}).click();await page.getByLabel('Assign carrier *',{exact:true}).selectOption('new');await page.getByLabel('Carrier name *',{exact:true}).fill('Carrier B');await page.getByRole('button',{name:'Assign 200 vehicles',exact:true}).click();await expect(page.getByRole('dialog')).toHaveCount(0);
+  await page.getByRole('button',{name:/^Carriers/}).click();await expect(page.getByRole('heading',{name:'Carrier operations'})).toBeVisible();
+  await page.getByRole('button',{name:'Open Carrier A',exact:true}).click();await expect(page.locator('.carrier-unit-table tbody tr')).toHaveCount(200);
+  await expect(page.locator('.carrier-unit-table tbody .vin-link').first()).toHaveText(rows[0].vin);await expect(page.getByRole('button',{name:'Paste sheet update'})).toBeEnabled();
+  await page.screenshot({path:'.local/screenshots/carrier-workspace.png',fullPage:false});
+  await page.getByLabel('Carrier workspace').selectOption({label:'Carrier B'});await expect(page.locator('.carrier-unit-table tbody .vin-link').first()).toHaveText(rows[200].vin);
+  await page.getByRole('button',{name:'Open register for selection / bulk edit'}).click();await expect(page.locator('tbody tr')).toHaveCount(200);
+  await expect(page.getByLabel('Filter carrier')).not.toHaveValue('all');expect(browserErrors).toEqual([]);
+});
+
+test('Carrier sheet gaps preview load builds; later milestone pastes reuse VINs and update progress',async({page})=>{
+  const p=await page.getByLabel('Active project').inputValue(),vins=[1,2,3,4].map(i=>`LSFAM11A1RA${String(i).padStart(6,'0')}`);
+  await page.request.post(`/api/projects/${p}/import`,{data:{packingList:'Daily carrier test',rows:vins.map(vin=>({vin,notes:'Original note'}))}});
+  await page.getByRole('button',{name:'Refresh workspace'}).click();await page.getByRole('button',{name:/^Unit register/}).click();await page.getByLabel('Number of VINs to select').fill('4');await page.getByRole('button',{name:'Select 4 VINs',exact:true}).click();await page.getByRole('button',{name:'Assign to carrier',exact:true}).click();await page.getByLabel('Carrier name *').fill('Daily Carrier');await page.getByRole('button',{name:'Assign 4 vehicles',exact:true}).click();await expect(page.getByRole('dialog')).toHaveCount(0);
+  await page.getByRole('button',{name:/^Carriers/}).click();await page.getByRole('button',{name:'Open Daily Carrier',exact:true}).click();
+  const sheet=(actual=false)=>'VIN No\tETD\tETA\tATD\tATA\tComments\n'+vins.map((vin,i)=>(i===2?'\n':'')+`${vin}\t${actual?'':'12/10/2026 08:00'}\t13/10/2026 12:00\t${actual?'12/10/2026 09:00':''}\t${actual?'13/10/2026 13:00':''}\t`).join('\n');
+  async function paste(actual=false){await page.getByRole('button',{name:'Paste sheet update'}).click();await page.getByLabel('Paste carrier sheet').fill(sheet(actual));await page.getByRole('button',{name:'Review changes'}).click();await expect(page.getByText('New load builds',{exact:true})).toBeVisible();}
+  await paste();await expect(page.locator('.proposed-load')).toHaveCount(2);await expect(page.getByRole('dialog').locator('.review-summary')).toContainText('2New load builds');await expect(page.getByRole('dialog').locator('.changes-table .badge.scheduled')).toHaveCount(4);
+  await page.screenshot({path:'.local/screenshots/carrier-update-review.png',fullPage:true});await page.getByRole('button',{name:'Apply update · 4 changed',exact:true}).click();await expect(page.getByRole('dialog')).toHaveCount(0);await expect(page.locator('.carrier-unit-table .badge.scheduled')).toHaveCount(4);
+  await paste(true);await expect(page.getByRole('dialog').locator('.review-summary')).toContainText('0New load builds');await expect(page.getByRole('dialog').locator('.changes-table .badge.delivered')).toHaveCount(4);await page.getByRole('button',{name:'Apply update · 4 changed',exact:true}).click();await expect(page.getByRole('dialog')).toHaveCount(0);await expect(page.locator('.carrier-unit-table .badge.delivered')).toHaveCount(4);
+  await paste(true);await page.getByRole('button',{name:'Apply update · 0 changed',exact:true}).click();await expect(page.getByRole('dialog')).toHaveCount(0);await expect(page.locator('.carrier-history tbody tr')).toHaveCount(3);
+  const w=await (await page.request.get(`/api/projects/${p}/workspace`)).json();expect(w.units.length).toBe(4);expect(w.loads.length).toBe(2);expect(w.units.every(u=>u.notes==='Original note'&&u.etd&&u.atd&&u.ata&&u.packing_list==='Daily carrier test')).toBe(true);
+});
+
+test('Carrier paste blocks unassigned VINs and a new carrier can be added without selecting vehicles',async({page})=>{
+  const p=await page.getByLabel('Active project').inputValue();await page.request.post(`/api/projects/${p}/import`,{data:{packingList:'Known VIN',rows:[{vin:'LSFAM11A1RA000001',carrier:'Known Carrier'}]}});
+  await page.getByRole('button',{name:'Refresh workspace'}).click();await page.getByRole('button',{name:/^Carriers/}).click();await page.getByRole('button',{name:'New carrier',exact:true}).click();await page.getByLabel('Carrier name *').fill('Second Carrier');await page.getByRole('dialog').getByRole('button',{name:'Add carrier',exact:true}).click();await expect(page.getByRole('dialog')).toHaveCount(0);
+  await page.getByRole('button',{name:'Open Known Carrier',exact:true}).click();await page.getByRole('button',{name:'Paste sheet update'}).click();await page.getByLabel('Paste carrier sheet').fill('VIN\tETA\nLSFAM11A1RA000002\t13/10/2026');await expect(page.getByRole('alert')).toContainText('Not in the packing list');await expect(page.getByRole('button',{name:'Review changes'})).toBeDisabled();await page.getByRole('button',{name:'Close dialog'}).click();
+  const w=await (await page.request.get(`/api/projects/${p}/workspace`)).json();expect(w.carriers).toHaveLength(2);expect(w.units).toHaveLength(1);
 });

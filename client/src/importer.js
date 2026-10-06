@@ -46,20 +46,20 @@ export function matchHeader(header,saved={}){
   const milestone=h.match(/^(etd|eta|atd|ata)(?:date|time|datetime|estimateddeparture|estimatedarrival|actualdeparture|actualarrival)$/);
   return milestone?milestone[1]:'';
 }
-export function parseGrid(raw) {
+export function parseGrid(raw,options={}) {
   const input=raw.replace(/^\uFEFF/,'');
   if(!input.trim())return [];
-  const lines=input.split(/\r?\n/).filter(line=>line.trim());
+  const allLines=input.split(/\r?\n/),lines=allLines.filter(line=>line.trim());
   const pipeHeader=lines.length&&lines[0].includes('|')&&!lines[0].includes('\t')&&lines[0].split('|').some(cell=>matchHeader(cell.trim())==='vin');
   if(lines.length&&(/^\s*\|.*\|\s*$/.test(lines[0])||pipeHeader)){
-    return lines.map(line=>{
+    return (options.preserveBlankRows?allLines:lines).map(line=>{
       const cells=[];let cell='';
       for(let i=0;i<line.length;i++){
         if(line[i]==='\\'&&line[i+1]==='|'){cell+='|';i++;}
         else if(line[i]==='|'){cells.push(cell.trim());cell='';}else cell+=line[i];
       }
       cells.push(cell.trim());if(cells[0]==='')cells.shift();if(cells.at(-1)==='')cells.pop();return cells;
-    }).filter(row=>row.some(cell=>cell&&!/^:?-{3,}:?$/.test(cell)));
+    }).filter(row=>row.some(cell=>cell&&!/^:?-{3,}:?$/.test(cell))||(options.preserveBlankRows&&row.every(cell=>!cell.trim())));
   }
   // Only inspect unquoted delimiters, so a tab in a quoted CSV comment cannot shift all columns.
   const scores={'\t':0,',':0,';':0};let inQuotes=false;
@@ -78,15 +78,15 @@ export function parseGrid(raw) {
     }else if(c===delimiter&&!quoted){row.push(cell);cell='';}
     else if((c==='\n'||c==='\r')&&!quoted){
       if(c==='\r'&&input[i+1]==='\n')i++;
-      row.push(cell);if(row.some(x=>x.trim()))rows.push(row);row=[];cell='';
+      row.push(cell);if(options.preserveBlankRows||row.some(x=>x.trim()))rows.push(row);row=[];cell='';
     }else cell+=c;
   }
   if(quoted)throw new Error('An opening quote has no closing quote. Copy the cells again.');
-  row.push(cell);if(row.some(x=>x.trim()))rows.push(row);
+  row.push(cell);if(options.preserveBlankRows||row.some(x=>x.trim()))rows.push(row);
   return rows;
 }
 export function inspectGrid(raw,options={}) {
-  const grid=parseGrid(raw);
+  const grid=parseGrid(raw,options);
   if(!grid.length)return {headers:[],mapping:[],rows:[],hasHeaders:false};
   const saved=options.savedMappings||{};
   const looksLikeHeader=row=>row.some(cell=>matchHeader(cell,saved)==='vin')||(row.filter(cell=>matchHeader(cell,saved)).length>=2&&row.every(c=>!!validateVin(cleanVin(c))));
@@ -101,7 +101,7 @@ export function inspectGrid(raw,options={}) {
   const rows=hasHeaders?grid.slice(index+1):grid;
   const mapping=hasHeaders?headers.map(h=>matchHeader(h,saved)):headers.map(()=> '');
   if(!mapping.includes('vin')){
-    const sample=rows.slice(0,20);
+    const sample=rows.filter(r=>r.some(cell=>cell.trim())).slice(0,20);
     const candidates=headers.map((_,i)=>i).filter(i=>sample.length&&sample.filter(r=>!validateVin(cleanVin(r[i]))).length>=Math.max(1,sample.length/2));
     if(candidates.length===1&&(!mapping[candidates[0]]))mapping[candidates[0]]='vin';
     else if(!hasHeaders&&width===1)mapping[0]='vin';

@@ -106,3 +106,77 @@ test('Bulk edits validate every vehicle before writing and reject cross-project 
   const {data:p2}=await f.request('/api/projects','POST',{name:'Other project'});await f.request(`/api/projects/${p2.id}/import`,'POST',{packingList:'Other',rows:[{vin:vin(10)}]});const {data:w2}=await f.request(`/api/projects/${p2.id}/workspace`);
   assert.equal((await f.request(endpoint,'POST',{unitIds:[ids[0],w2.units[0].id],changes:[{field:'origin',mode:'set',value:'Kallo'}]})).status,404);assert.equal((await f.workspace()).units[0].origin,'');
 });
+
+test('Packing-list order survives re-imports; 200 VINs can be assigned independently of load planning',async t=>{
+  const f=await fixture(t),rows=Array.from({length:400},(_,i)=>({vin:vin(400-i),notes:'Original note'}));
+  await f.importRows(rows);let w=await f.workspace();assert.deepEqual(w.units.map(u=>u.vin),rows.map(u=>u.vin));
+  await f.importRows([...rows].reverse());w=await f.workspace();assert.deepEqual(w.units.map(u=>u.vin),rows.map(u=>u.vin));
+  const {data:c}=await f.request(`/api/projects/${f.p}/carriers`,'POST',{name:'First Carrier'});
+  const path=`/api/projects/${f.p}/carriers/${c.id}`;
+  assert.equal((await f.request(path+'/assign','POST',{unitIds:w.units.slice(0,200).map(u=>u.id)})).data.assigned,200);
+  w=await f.workspace();assert.ok(w.units.slice(0,200).every(u=>u.carrier==='First Carrier'&&u.status==='unscheduled'&&!u.load_id));assert.ok(w.units.slice(200).every(u=>!u.carrier));
+  assert.equal(w.carriers.length,1);
+  assert.equal((await f.request(`/api/projects/${f.p}/carriers`,'POST',{name:'first carrier'})).data.id,c.id);
+  const {data:p2}=await f.request('/api/projects','POST',{name:'Other'});
+  assert.equal((await f.request(`/api/projects/${p2.id}/carriers/${c.id}/assign`,'POST',{unitIds:[w.units[0].id]})).status,404);
+});
+
+async function carrierFixture(t,count=4){
+  const f=await fixture(t);await f.importRows(Array.from({length:count},(_,i)=>({vin:vin(i+1),notes:'Keep note',origin:'Kallo',destination:'Zeebrugge'})));
+  const {data:c}=await f.request(`/api/projects/${f.p}/carriers`,'POST',{name:'Carrier A'});const w=await f.workspace();
+  const path=`/api/projects/${f.p}/carriers/${c.id}`;await f.request(path+'/assign','POST',{unitIds:w.units.map(u=>u.id)});
+  const preview=body=>f.request(path+'/updates/preview','POST',body);
+  async function apply(body){const r=await preview(body);assert.equal(r.status,200,JSON.stringify(r.data));return f.request(path+'/updates','POST',{...body,snapshot:r.data.snapshot});}
+  return {...f,c,path,preview,apply};
+}
+test('Carrier sheets create gap loads, reuse them on repeated pastes, preserve blanks, and update all four milestones',async t=>{
+  const f=await carrierFixture(t);
+  let body={groupLoads:true,rows:[1,2,3,4].map((i)=>({vin:vin(i),group:i<3?'0':'1',etd:'2026-10-12T06:00:00Z',eta:'2026-10-13T10:00:00Z'}))};
+  let r=await f.preview(body);assert.equal(r.data.counts.loadsCreated,2);assert.equal(r.data.counts.changed,4);assert.ok((await f.workspace()).units.every(u=>!u.etd));
+  r=await f.apply(body);assert.equal(r.status,200);let w=await f.workspace();const loadIds=w.units.map(u=>u.load_id);assert.equal(w.loads.length,2);assert.ok(w.units.every(u=>u.status==='scheduled'&&u.packing_list==='PL-001'&&u.notes==='Keep note'));
+  assert.equal((await f.apply(body)).data.changed,0);w=await f.workspace();assert.equal(w.loads.length,2);assert.deepEqual(w.units.map(u=>u.load_id),loadIds);assert.equal(w.carrierUpdates.length,2);assert.ok(w.carriers[0].last_update);
+  body={...body,rows:body.rows.map(r=>({...r,etd:'',eta:'2026-10-14T10:00:00Z',atd:'2026-10-12T07:00:00Z',ata:'2026-10-14T09:00:00Z',notes:''}))};
+  assert.equal((await f.apply(body)).status,200);w=await f.workspace();assert.equal(w.units.length,4);assert.ok(w.units.every(u=>u.status==='delivered'&&u.etd==='2026-10-12T06:00:00Z'&&u.notes==='Keep note'));assert.ok(w.loads.every(l=>l.eta==='2026-10-14T10:00:00Z'));
+  // A daily paste may contain only one VIN from a saved departed load.
+  assert.equal((await f.apply({groupLoads:true,rows:[{vin:vin(1),group:'0',eta:'2026-10-15T10:00:00Z'}]})).status,200);
+  w=await f.workspace();assert.deepEqual(w.units.map(u=>u.load_id),loadIds);assert.equal(w.units[1].eta,'2026-10-14T10:00:00Z');assert.equal(w.loads.find(l=>l.id===loadIds[0]).eta,'');
+});
+test('Carrier update validation is atomic, isolates carriers, and rejects stale previews',async t=>{
+  const f=await carrierFixture(t);const w=await f.workspace();const {data:b}=await f.request(`/api/projects/${f.p}/carriers`,'POST',{name:'Carrier B'});
+  await f.request(`/api/projects/${f.p}/carriers/${b.id}/assign`,'POST',{unitIds:[w.units[3].id]});
+  for(const rows of [[{vin:vin(1),notes:'Changed'},{vin:vin(4)}],[{vin:vin(1)},{vin:vin(99)}],[{vin:vin(1)},{vin:vin(1)}],[{vin:vin(1),carrier:'Carrier B'}],[{vin:vin(1),atd:'2026-10-13T08:00:00Z',ata:'2026-10-12T08:00:00Z'}]]){
+    const r=await f.preview({groupLoads:false,rows});assert.equal(r.status,400);assert.equal((await f.workspace()).units[0].notes,'Keep note');assert.equal((await f.workspace()).carrierUpdates.length,0);
+  }
+  const body={groupLoads:false,rows:[{vin:vin(1),notes:'Sheet update'}]},review=await f.preview(body);
+  await f.request(`/api/projects/${f.p}/units/${w.units[0].id}`,'PATCH',{notes:'Newer manual update'});
+  assert.equal((await f.request(f.path+'/updates','POST',{...body,snapshot:review.data.snapshot})).status,409);assert.equal((await f.workspace()).units[0].notes,'Newer manual update');
+  assert.equal((await f.apply(body)).status,200);assert.equal((await f.workspace()).units[0].notes,'Sheet update');
+});
+test('Changing blank-row groups repartitions planned loads but never moves departed VINs',async t=>{
+  const f=await carrierFixture(t);
+  await f.apply({groupLoads:true,rows:[1,2,3,4].map(i=>({vin:vin(i),group:'0'}))});
+  const split={groupLoads:true,rows:[1,2,3,4].map(i=>({vin:vin(i),group:i<3?'0':'1'}))};
+  assert.equal((await f.apply(split)).data.loadsCreated,2);let w=await f.workspace();assert.equal(w.units[0].load_id,w.units[1].load_id);assert.notEqual(w.units[0].load_id,w.units[2].load_id);
+  const ids=w.units.map(u=>u.load_id);await f.request(`/api/projects/${f.p}/units/${w.units[0].id}`,'PATCH',{atd:'2026-10-12T07:00:00Z'});
+  const regroup={groupLoads:true,rows:[1,2,3,4].map(i=>({vin:vin(i),group:i%2?'0':'1'}))};
+  assert.equal((await f.preview(regroup)).status,400);w=await f.workspace();assert.deepEqual(w.units.map(u=>u.load_id),ids);
+  assert.equal((await f.apply({...regroup,groupLoads:false})).status,200);assert.deepEqual((await f.workspace()).units.map(u=>u.load_id),ids);
+  const {data:b}=await f.request(`/api/projects/${f.p}/carriers`,'POST',{name:'Carrier B'});assert.equal((await f.request(`/api/projects/${f.p}/carriers/${b.id}/assign`,'POST',{unitIds:[w.units[1].id]})).status,400);
+});
+test('Explicit carrier load references enforce capacity and carrier ownership',async t=>{
+  const f=await carrierFixture(t);
+  const {data:l}=await f.request(`/api/projects/${f.p}/loads`,'POST',{reference:'TRUCK-01',carrier:'Carrier A',capacity:2});
+  assert.equal((await f.preview({groupLoads:true,rows:[1,2,3].map(i=>({vin:vin(i),load_reference:'TRUCK-01'}))})).status,400);
+  assert.equal((await f.apply({groupLoads:true,rows:[1,2].map(i=>({vin:vin(i),load_reference:'TRUCK-01'}))})).status,200);
+  assert.ok((await f.workspace()).units.slice(0,2).every(u=>u.load_id===l.id));
+  await f.request(`/api/projects/${f.p}/loads`,'POST',{reference:'OTHER',carrier:'Carrier B'});
+  assert.equal((await f.preview({groupLoads:true,rows:[{vin:vin(3),load_reference:'OTHER'}]})).status,400);
+});
+
+test('A later gap can establish missing load membership without losing recorded actual milestones',async t=>{
+  const f=await carrierFixture(t,2);
+  await f.apply({groupLoads:false,rows:[{vin:vin(1),atd:'2026-10-12T07:00:00Z',ata:'2026-10-13T07:00:00Z'}]});
+  assert.equal((await f.workspace()).units[0].load_id,null);
+  const r=await f.apply({groupLoads:true,rows:[{vin:vin(1),group:'0'},{vin:vin(2),group:'1'}]});assert.equal(r.status,200);assert.equal(r.data.loadsCreated,2);
+  const w=await f.workspace();assert.ok(w.units[0].load_id);assert.equal(w.units[0].status,'delivered');assert.equal(w.units[0].ata,'2026-10-13T07:00:00Z');
+});

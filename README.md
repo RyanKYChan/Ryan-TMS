@@ -4,6 +4,8 @@ A mini TMS for vehicle spot transport and shunting, starting with a Maxus projec
 
 ## Open it on your Windows computer
 
+[Download the v0.3.0 Windows ZIP](https://github.com/RyanKYChan/Ryan-TMS/raw/refs/heads/main/downloads/ryan-tms-windows-v0.3.0.zip)
+
 ChatGPT's cloud environment page does not expose the web app. The server must run on your own computer, or the app needs a separate hosted deployment. Opening the HTML files directly does not start the API.
 
 Install Node.js 24, extract the downloadable app ZIP, and double-click `START-TMS.cmd` in the extracted folder. It installs dependencies on first use and starts the built app. Edge opens after a successful readiness check. Keep the command window open while using the app. See `OPEN-ME.txt` for step-by-step instructions. The ZIP excludes workspace databases and starts with an empty real project.
@@ -12,7 +14,7 @@ The launcher can also be run using `npm run open` after dependencies and the pro
 
 ## Update an existing Windows installation
 
-Close the app's command window first. Make a backup copy of your existing `data` folder. Extract the new ZIP into the same parent folder so its `Ryan-TMS` folder merges with your current `Ryan-TMS` folder; replace application files when prompted. **Do not delete the old folder or its `data` directory.** The ZIP contains no database or `data` folder, so merging it does not replace your existing packing lists. Start `START-TMS.cmd` again and refresh Edge. Version 0.2.0 appears in the footer.
+Close the app's command window first. Make a backup copy of your existing `data` folder. Extract the new ZIP into the same parent folder so its `Ryan-TMS` folder merges with your current `Ryan-TMS` folder; replace application files when prompted. **Do not delete the old folder or its `data` directory.** The ZIP contains no database or `data` folder, so merging it does not replace your existing packing lists. Start `START-TMS.cmd` again and refresh Edge. Version 0.3.0 appears in the footer. Existing packing lists, notes, dates, and load assignments are retained; the database gains carrier workspaces and saved packing-list order automatically.
 
 You can re-paste an existing packing list with its original name to fill previously missed columns. Matching VINs update in place rather than creating duplicates.
 
@@ -53,6 +55,32 @@ The importer detects common header variations and can find a header after title 
 For vehicles already imported, open **Unit register**, select vehicles, and click **Bulk edit**. The header checkbox selects the current page; **Select all N matching vehicles** expands the selection across every filtered page. Add only the fields you want to change and choose **Set value**, **Fill blanks**, or **Clear**. Review the per-VIN preview and apply. The API validates the whole batch before writing, and an invalid milestone prevents partial changes. Bulk edits apply to vehicle records; editing a load later can resynchronise its route and planning fields.
 
 Use **Explore a sample project** to try the flow before real data arrives. Sample VINs, routes, carriers, and prices live in a separate, clearly labelled demo project. Real projects start empty.
+
+## Assign the first 200 VINs to a carrier
+
+1. Open **Unit register**. Optionally filter to a particular packing list. **Rows per page** offers 50, 100, 200, 400, or **All vehicles**; the default is 200.
+2. Enter **200** in **Select next** and click **Select 200 VINs**. The selection follows the original packing-list import order, across pages. Re-importing a sheet does not reorder existing VINs. For older databases, original insertion order is restored automatically.
+3. Click **Assign to carrier**. Enter a new carrier name or choose an existing carrier, then click **Assign 200 vehicles**.
+4. Repeat for the next batch. **Without a carrier only** is enabled by default, so the first carrier's VINs are skipped. Already selected VINs are also skipped when adding another batch. You can select individual checkboxes or select all matching vehicles instead.
+
+Carrier allocation does not create a load or mark vehicles as planned. Vehicles on an existing load retain its carrier unless you change the load's carrier, or remove planned vehicles from that load first. VINs, packing lists, route details, notes, and milestones remain in place.
+
+## Check each carrier's sheet whenever it changes
+
+Open **Carriers**, then click the carrier's name or choose its workspace. All assigned VINs appear in packing-list order, including their load builds and ETD, ETA, ATD, ATA. **Copy VINs** copies that carrier's allocation for a new shared sheet. **Open register for selection / bulk edit** filters the main register to that carrier.
+
+Click **Paste sheet update**, copy the carrier's Google Sheets cells including headers, and paste. Generic packing-list fields are supported, plus `Load`, `Load ID`, `Load reference`, `Loadbuild`, and `Trip number`. Check the column mapping and date format, then **Review changes**. The preview shows each changed value, resulting status, and proposed load group. **Apply update** saves the reviewed changes.
+
+- The paste matches existing VINs in this project and carrier; it does not create vehicles or move them to a new packing list. Unknown VINs and VINs assigned to another carrier are flagged before applying. Import or assign them first.
+- Blank cells preserve saved values. VINs absent from a paste keep their saved details and carrier allocation. Use vehicle details or bulk edit to explicitly clear a value.
+- A `Load` reference groups matching rows. If only the first row of a load has its reference, the reference fills down until another reference or a blank-row gap.
+- Copy blank rows too: when gaps separate groups, **Apply load groups** proposes a load per group. Load names are generated when references are missing. Disable this checkbox to update dates and details while retaining saved load membership.
+- Repeating the same groups reuses existing loads. A partial update can reuse one existing load; changing gaps can split or merge planned groups. The preview lists affected VINs and load moves. Empty old load records remain available as history.
+- Departed or delivered VINs retain any existing load. Gaps can establish a missing load when actual milestones were recorded before the load was known. Actual dates are never cleared by a blank paste.
+- All rows are validated before saving. If saved data changes after preview, review the paste again. Existing load capacity and carrier ownership are checked. New groups have capacity equal to their pasted vehicle count, up to 500.
+- The overview and **Carriers** show progress across all carriers, milestone coverage, and the latest sheet check. **Sheet checks** records each paste, including checks with zero changes. Individual changes are also recorded in the project activity log.
+
+The app updates when you paste and apply; checking a Google Sheet remains a manual step. The [carrier sheet template](templates/carrier-sheet.tsv) supplies a header row for carrier planning.
 
 ## Sheet columns
 

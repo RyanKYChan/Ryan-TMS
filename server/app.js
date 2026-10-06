@@ -2,6 +2,7 @@ import express from 'express';
 import { randomUUID } from 'node:crypto';
 import { FIELDS, cleanVin, validateVin, validateUnit, status, exportCsv, planBulkEdit } from './domain.js';
 import { transaction } from './db.js';
+import { registerCarrierRoutes, ensureCarrier } from './carriers.js';
 
 export function createApp(db) {
   const app = express();
@@ -15,7 +16,7 @@ export function createApp(db) {
   const count = (v,min,max) => Number.isInteger(v) && v>=min && v<=max ? v : fail(`Enter a whole number between ${min} and ${max}.`);
   const units = p => db.prepare(`SELECT u.*, pl.name AS packing_list, l.reference AS load_ref FROM units u
     LEFT JOIN packing_lists pl ON pl.id=u.packing_list_id LEFT JOIN loads l ON l.id=u.load_id
-    WHERE u.project_id=? ORDER BY u.created_at, u.vin`).all(p).map(u=>({...u,status:status(u)}));
+    WHERE u.project_id=? ORDER BY u.import_order, u.rowid`).all(p).map(u=>({...u,status:status(u)}));
   const unitById = (p,id) => db.prepare('SELECT * FROM units WHERE project_id=? AND id=?').get(p,id) || fail('Unit not found.',404);
   const loadById = (p,id) => db.prepare('SELECT * FROM loads WHERE project_id=? AND id=?').get(p,id) || fail('Load not found.',404);
   app.get('/api/health', (_req,res) => { db.prepare('SELECT 1').get(); res.json({ok:true}); });
@@ -30,6 +31,8 @@ export function createApp(db) {
     const p=project(req.params.p);
     res.json({project:p,units:units(p.id),loads:db.prepare('SELECT * FROM loads WHERE project_id=? ORDER BY created_at DESC').all(p.id),
       packingLists:db.prepare('SELECT * FROM packing_lists WHERE project_id=? ORDER BY created_at DESC').all(p.id),
+      carriers:db.prepare(`SELECT c.*, (SELECT max(created_at) FROM carrier_updates WHERE carrier_id=c.id) AS last_update FROM carriers c WHERE project_id=? ORDER BY name`).all(p.id),
+      carrierUpdates:db.prepare('SELECT * FROM carrier_updates WHERE project_id=? ORDER BY created_at DESC LIMIT 100').all(p.id),
       events:db.prepare('SELECT * FROM events WHERE project_id=? ORDER BY created_at DESC LIMIT 50').all(p.id)});
   });
   app.get('/api/projects/:p/export', (req,res) => {
@@ -55,7 +58,9 @@ export function createApp(db) {
       let list=db.prepare('SELECT * FROM packing_lists WHERE project_id=? AND name=?').get(p,name);
       if(!list) { list={id:randomUUID()}; db.prepare('INSERT INTO packing_lists VALUES(?,?,?,?)').run(list.id,p,name,now()); }
       let added=0,updated=0;
+      let nextOrder=db.prepare('SELECT coalesce(max(import_order),0) AS n FROM units WHERE project_id=?').get(p).n;
       for(const {u,old} of normalized) {
+        if(u.carrier)u.carrier=ensureCarrier(db,p,u.carrier).name;
         if(old) {
           const entries=Object.entries(u).filter(([f])=>f!=='vin');
           db.prepare(`UPDATE units SET packing_list_id=?,updated_at=?${entries.map(([f])=>`,${f}=?`).join('')} WHERE id=?`)
@@ -63,8 +68,8 @@ export function createApp(db) {
           event(p,old.id,`Updated from packing list ${name}`); updated++;
         } else {
           const id=randomUUID(), t=now();
-          db.prepare(`INSERT INTO units(id,project_id,${FIELDS.join(',')},packing_list_id,created_at,updated_at) VALUES(${Array(FIELDS.length+5).fill('?').join(',')})`)
-            .run(id,p,...FIELDS.map(f=>u[f]??''),list.id,t,t);
+          db.prepare(`INSERT INTO units(id,project_id,${FIELDS.join(',')},packing_list_id,created_at,updated_at,import_order) VALUES(${Array(FIELDS.length+6).fill('?').join(',')})`)
+            .run(id,p,...FIELDS.map(f=>u[f]??''),list.id,t,t,++nextOrder);
           event(p,id,`Imported ${u.vin} from ${name}`); added++;
         }
       }
@@ -79,6 +84,7 @@ export function createApp(db) {
     let plan;try{plan=planBulkEdit(selected,req.body.changes);}catch(e){fail(e.message);}
     let updated=0;
     transaction(db,()=>{for(const {unit,update} of plan){
+      if(update.carrier)update.carrier=ensureCarrier(db,p,update.carrier).name;
       const entries=Object.entries(update);if(!entries.length)continue;
       db.prepare(`UPDATE units SET ${entries.map(([f])=>`${f}=?`).join(',')},updated_at=? WHERE id=?`).run(...entries.map(([,v])=>v),now(),unit.id);
       event(p,unit.id,`Bulk updated ${unit.vin}: ${entries.map(([f])=>f.toUpperCase()).join(', ')}`);updated++;
@@ -93,6 +99,7 @@ export function createApp(db) {
     const e=validateUnit({...old,...update}); if(e)fail(e);
     const entries=Object.entries(update); if(!entries.length)fail('No fields to update.');
     transaction(db,()=>{
+      if(update.carrier)update.carrier=ensureCarrier(db,p,update.carrier).name;
       db.prepare(`UPDATE units SET ${entries.map(([f])=>`${f}=?`).join(',')},updated_at=? WHERE id=?`).run(...entries.map(([,v])=>v),now(),old.id);
       event(p,old.id,`Updated ${old.vin}: ${entries.filter(([f,v])=>old[f]!==v).map(([f])=>f.toUpperCase()).join(', ') || 'details saved'}`);
     });
@@ -105,8 +112,11 @@ export function createApp(db) {
   };
   app.post('/api/projects/:p/loads', (req,res) => {
     const p=project(req.params.p).id,l=validateLoad(req.body),id=randomUUID();
-    db.prepare('INSERT INTO loads VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)').run(id,p,l.reference,l.carrier,l.truck,l.driver,l.capacity,l.origin,l.destination,l.etd,l.eta,l.notes,now());
-    event(p,null,`Created load ${l.reference}`);res.status(201).json(loadById(p,id));
+    transaction(db,()=>{
+      if(l.carrier)l.carrier=ensureCarrier(db,p,l.carrier).name;
+      db.prepare('INSERT INTO loads VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)').run(id,p,l.reference,l.carrier,l.truck,l.driver,l.capacity,l.origin,l.destination,l.etd,l.eta,l.notes,now());
+      event(p,null,`Created load ${l.reference}`);
+    });res.status(201).json(loadById(p,id));
   });
   app.patch('/api/projects/:p/loads/:id', (req,res) => {
     const p=project(req.params.p).id,old=loadById(p,req.params.id),l=validateLoad({...old,...req.body});
@@ -114,6 +124,7 @@ export function createApp(db) {
     const assigned=db.prepare('SELECT * FROM units WHERE load_id=?').all(old.id);
     for(const u of assigned) {const e=validateUnit({...u,etd:l.etd,eta:l.eta});if(e)fail(e);}
     transaction(db,()=>{
+      if(l.carrier)l.carrier=ensureCarrier(db,p,l.carrier).name;
       const entries=Object.entries(l);
       db.prepare(`UPDATE loads SET ${entries.map(([f])=>`${f}=?`).join(',')} WHERE id=?`).run(...entries.map(([,v])=>v),old.id);
       db.prepare('UPDATE units SET origin=?,destination=?,etd=?,eta=?,carrier=?,truck=?,updated_at=? WHERE load_id=?').run(l.origin,l.destination,l.etd,l.eta,l.carrier,l.truck,now(),old.id);
@@ -149,6 +160,7 @@ export function createApp(db) {
     transaction(db,()=>{for(const u of pending){db.prepare(`UPDATE units SET ${field}=?,updated_at=? WHERE id=?`).run(value,now(),u.id);event(p,u.id,`${field==='atd'?'Departed':'Delivered'} on load ${l.reference}`);}});
     res.json({updated:pending.length});
   });
+  registerCarrierRoutes(app,db,{project,units,unitById,event,fail,text,now});
   app.use('/api',(_req,res)=>res.status(404).json({error:'API endpoint not found.'}));
   app.use((e,_req,res,_next)=>{
     if(e.code==='ERR_SQLITE_ERROR' && /UNIQUE constraint/.test(e.message))return res.status(409).json({error:'This VIN, packing list, or load reference already exists in the project.'});

@@ -4,8 +4,8 @@ export type ImportPreview = {unit:Record<string,string>;errors:string[];index:nu
 export function inferAddressDetails(address:string,side:string):Record<string,string>;
 export function normalizeHeader(s:string):string;
 export function matchHeader(header:string,saved?:Record<string,string>):string;
-export function parseGrid(raw:string):string[][];
-export function inspectGrid(raw:string,options?:{headerMode?:string;savedMappings?:Record<string,string>}):Grid;
+export function parseGrid(raw:string,options?:{preserveBlankRows?:boolean}):string[][];
+export function inspectGrid(raw:string,options?:{headerMode?:string;savedMappings?:Record<string,string>;preserveBlankRows?:boolean}):Grid;
 export function parseDate(value:string,order?:string):string;
 export function parsePrice(value:string):string;
 export function previewRows(grid:string[][],mapping:string[],existing?:{vin:string}[],order?:string,defaults?:Record<string,string>):ImportPreview[];

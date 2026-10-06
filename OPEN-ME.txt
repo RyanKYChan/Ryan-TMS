@@ -1,4 +1,4 @@
-RYAN TMS v0.2.0 - Open the dashboard on your Windows computer
+RYAN TMS v0.3.0 - Open the dashboard on your Windows computer
 
 1. Install Node.js version 24 from https://nodejs.org if you do not have it.
 2. Extract the entire ZIP file to a folder on your computer.
@@ -15,6 +15,11 @@ The dashboard includes:
 - Explore a sample project: try clearly labelled demonstration data first.
 - Bulk edit: select vehicles in Unit register and edit shared fields together.
 - Generic imports: VIN No, Model, Loading and Unloading are recognised.
+- Rows per page: show 50, 100, 200, 400, or all VINs.
+- Select next: choose a batch of VINs in original packing-list order.
+- Assign to carrier: allocate 200 VINs or any selected batch at once.
+- Carriers: a separate workspace for each carrier and a progress comparison.
+- Paste sheet update: preview changed milestones and gap-based load builds.
 
 UPDATING A PREVIOUS INSTALLATION
 Close the app's command window before updating.
@@ -23,7 +28,14 @@ Extract this ZIP into the SAME parent folder so the Ryan-TMS folder merges
 with your existing Ryan-TMS folder. Replace application files when asked.
 DO NOT delete the old folder or its data directory first.
 This ZIP contains no data folder and does not replace your existing database.
-Start START-TMS.cmd again, refresh Edge, and check v0.2.0 in the footer.
+Start START-TMS.cmd again, refresh Edge, and check v0.3.0 in the footer.
+
+TO ASSIGN YOUR FIRST 200 VINS
+Open Unit register. Enter 200 under Select next, then Select 200 VINs.
+Click Assign to carrier, enter the carrier name, and Assign 200 vehicles.
+Repeat for the next carrier: allocated VINs are skipped by default.
+Open Carriers and select a carrier to paste their latest sheet update.
+Copy blank rows too when gaps represent load builds. Review before applying.
 
 To repair an earlier packing list import, re-paste it with the same name.
 Matching VINs update in place; you do not need to recreate the vehicles.

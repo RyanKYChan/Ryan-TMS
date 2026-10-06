@@ -33,7 +33,24 @@ export function openDb(filename) {
     CREATE TABLE IF NOT EXISTS events (
       id TEXT PRIMARY KEY, project_id TEXT NOT NULL REFERENCES projects(id), unit_id TEXT REFERENCES units(id),
       description TEXT NOT NULL, created_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS carriers (
+      id TEXT PRIMARY KEY, project_id TEXT NOT NULL REFERENCES projects(id),
+      name TEXT NOT NULL COLLATE NOCASE, created_at TEXT NOT NULL, UNIQUE(project_id,name)
+    );
+    CREATE TABLE IF NOT EXISTS carrier_updates (
+      id TEXT PRIMARY KEY, project_id TEXT NOT NULL REFERENCES projects(id), carrier_id TEXT NOT NULL REFERENCES carriers(id),
+      row_count INTEGER NOT NULL, changed_count INTEGER NOT NULL, loads_created INTEGER NOT NULL, created_at TEXT NOT NULL
     );`);
+  // Preserve the insertion order of older packing lists when upgrading an existing database.
+  if (!db.prepare('PRAGMA table_info(units)').all().some(c=>c.name==='import_order')) {
+    transaction(db,()=>{
+      db.exec('ALTER TABLE units ADD COLUMN import_order INTEGER NOT NULL DEFAULT 0');
+      db.exec('UPDATE units SET import_order=rowid');
+    });
+  }
+  const existingNames=db.prepare("SELECT project_id,carrier AS name FROM units WHERE trim(carrier)<>'' UNION SELECT project_id,carrier AS name FROM loads WHERE trim(carrier)<>''").all();
+  transaction(db,()=>{for(const c of existingNames) db.prepare('INSERT OR IGNORE INTO carriers VALUES(?,?,?,?)').run(randomUUID(),c.project_id,c.name.trim(),new Date().toISOString());});
   if (!db.prepare('SELECT id FROM projects LIMIT 1').get()) {
     db.prepare('INSERT INTO projects(id,name,customer,target,created_at) VALUES(?,?,?,?,?)')
       .run(randomUUID(), 'Maxus spot operations', 'MAXUS', 400, new Date().toISOString());
