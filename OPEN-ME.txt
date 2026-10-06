@@ -1,0 +1,32 @@
+RYAN TMS - Open the dashboard on your Windows computer
+
+1. Install Node.js version 24 from https://nodejs.org if you do not have it.
+2. Extract the entire ZIP file to a folder on your computer.
+3. Open the extracted Ryan-TMS folder and double-click START-TMS.cmd.
+4. The first start installs dependencies, so internet access is needed.
+5. The launcher opens the working dashboard in Edge after the app is ready.
+6. Keep the command window open while using the app.
+
+The dashboard includes:
+- Import units: paste VINs or rows copied from Google Sheets.
+- Packing lists: organise your imported vehicle manifests.
+- Load builds: create loads and assign vehicles.
+- Unit register: track ETD, ETA, ATD, ATA, T1 and your other sheet fields.
+- Explore a sample project: try clearly labelled demonstration data first.
+
+Your real Maxus project starts empty, with a planning target of 400 units.
+Your data saves to data/tms.sqlite in this extracted folder.
+The download includes no real vehicle records or cloud workspace database.
+
+ChatGPT's cloud environment settings page does not display this web app.
+Opening client/index.html or dist/index.html directly is also not sufficient:
+the app needs its local web server and database API, started by the launcher.
+
+If Edge does not open automatically, enter localhost:3000 in Edge's address
+bar AFTER the command window says "Dashboard is ready".
+
+Do not delete this folder after importing real data. Use Export CSV or
+run "npm run backup" from this folder to make a backup.
+
+This version runs locally on your computer. Shared online hosting and
+automatic Google Sheets sync are not included.

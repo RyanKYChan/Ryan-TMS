@@ -1,0 +1,46 @@
+{
+  "name": "ryan-tms",
+  "version": "0.1.0",
+  "private": true,
+  "engines": { "node": ">=24 <25" },
+  "description": "Project-based vehicle spot transport management",
+  "scripts": {
+    "dev": "node server/index.js",
+    "build": "tsc --noEmit && vite build",
+    "start": "NODE_ENV=production node server/index.js",
+    "open": "node server/open.js",
+    "backup": "node server/backup.js",
+    "test": "node --test tests/*.test.js",
+    "test:e2e": "playwright test"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/RyanKYChan/Ryan-TMS.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "bugs": {
+    "url": "https://github.com/RyanKYChan/Ryan-TMS/issues"
+  },
+  "homepage": "https://github.com/RyanKYChan/Ryan-TMS#readme",
+  "dependencies": {
+    "@fontsource-variable/dm-sans": "^5.3.0",
+    "@fontsource-variable/manrope": "^5.3.0",
+    "express": "^5.2.1",
+    "lucide-react": "^1.52.0",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.63.0",
+    "@types/express": "^5.0.6",
+    "@types/node": "^26.6.4",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.2",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.3"
+  }
+}
