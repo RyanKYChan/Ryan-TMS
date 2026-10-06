@@ -10,6 +10,12 @@ Install Node.js 24, extract the downloadable app ZIP, and double-click `START-TM
 
 The launcher can also be run using `npm run open` after dependencies and the production build are present. Browser launch is Windows-specific; other systems display a local address. The dashboard, import, and tracking logic are the same as the workspace version.
 
+## Update an existing Windows installation
+
+Close the app's command window first. Make a backup copy of your existing `data` folder. Extract the new ZIP into the same parent folder so its `Ryan-TMS` folder merges with your current `Ryan-TMS` folder; replace application files when prompted. **Do not delete the old folder or its `data` directory.** The ZIP contains no database or `data` folder, so merging it does not replace your existing packing lists. Start `START-TMS.cmd` again and refresh Edge. Version 0.2.0 appears in the footer.
+
+You can re-paste an existing packing list with its original name to fill previously missed columns. Matching VINs update in place rather than creating duplicates.
+
 ## Start the app
 
 Requires **Node.js 24** (the environment uses 24.19.0).
@@ -39,6 +45,12 @@ The repository is an existing checkout in an isolated cloud workspace; do not cr
 6. Open the load and select available units, or select vehicles in the register and use **Assign to load**.
 7. Record actual departure (ATD) and actual arrival (ATA) on the load. Existing actual timestamps are preserved; only missing milestones are filled. Click a VIN to edit milestones individually.
 8. Use **Export CSV** to download the project's full register for Google Sheets.
+
+For a generic packing list with **VIN No**, **Model**, **Loading**, and **Unloading**, the two address columns map to the complete POL and POD addresses automatically. When an address ends in a recognised postcode/city pattern, those fields are extracted too (for example `9130 Kallo` or `8380 Zeebrugge`). Countries are only inferred when explicitly supplied; a postcode alone does not establish a country. Copied spreadsheet rows, CSV/semicolon data, and Markdown tables are supported.
+
+The importer detects common header variations and can find a header after title rows. Choose **First row contains headers** if automatic detection needs an override. Unmatched columns are shown in the mapping panel; custom mappings are remembered in your browser after a successful import. **Shared POL / POD details** fills blank values for the whole import while preserving values supplied in the sheet or already stored on an existing vehicle.
+
+For vehicles already imported, open **Unit register**, select vehicles, and click **Bulk edit**. The header checkbox selects the current page; **Select all N matching vehicles** expands the selection across every filtered page. Add only the fields you want to change and choose **Set value**, **Fill blanks**, or **Clear**. Review the per-VIN preview and apply. The API validates the whole batch before writing, and an invalid milestone prevents partial changes. Bulk edits apply to vehicle records; editing a load later can resynchronise its route and planning fields.
 
 Use **Explore a sample project** to try the flow before real data arrives. Sample VINs, routes, carriers, and prices live in a separate, clearly labelled demo project. Real projects start empty.
 
@@ -93,11 +105,11 @@ Optional runtime overrides: `PORT` (default 3000), `HOST` (default 127.0.0.1), `
 
 ```sh
 npm run build       # Type check and production bundle
-npm test            # 14 API/import tests, including 400 units
+npm test            # API/import tests, including 400-unit import and bulk editing
 npm run test:e2e    # Browser workflows against a separate test database
 ```
 
-The browser tests use the installed `/usr/bin/chromium` and `.local/e2e.sqlite` on port 3100. Set `CHROMIUM_PATH` if the browser lives elsewhere. They cover import, validation, repeat import, load creation/assignment, departure, arrival, editing, CSV export, persistence, project creation, sample data, and mobile navigation.
+The browser tests use the installed `/usr/bin/chromium` and `.local/e2e.sqlite` on port 3100. Set `CHROMIUM_PATH` if the browser lives elsewhere. They cover import, validation, repeat import, the generic Loading/Unloading sheet, shared details, saved mappings, bulk editing across pages, load creation/assignment, departure, arrival, editing, CSV export, persistence, project creation, sample data, and mobile navigation.
 
 ## Structure
 

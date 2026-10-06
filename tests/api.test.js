@@ -90,3 +90,19 @@ test('Unique references return a conflict and no duplicate load is created',asyn
   assert.equal((await f.request(`/api/projects/${f.p}/loads`,'POST',body)).status,409);
   assert.equal((await f.workspace()).loads.length,1);
 });
+test('Bulk editing fills, sets and clears POL/POD for 400 units while retaining VINs and other fields',async t=>{
+  const f=await fixture(t);await f.importRows(Array.from({length:400},(_,i)=>({vin:vin(i+1),origin:i===0?'Keep origin':'',notes:'Keep notes',price:'95.50'})));
+  let w=await f.workspace(),ids=w.units.map(u=>u.id);
+  let r=await f.request(`/api/projects/${f.p}/units/bulk`,'POST',{unitIds:ids,changes:[{field:'origin',mode:'fill',value:'Kallo'},{field:'destination',mode:'set',value:'Zeebrugge'},{field:'t1',mode:'set',value:'yes'}]});
+  assert.equal(r.status,200);assert.equal(r.data.updated,400);w=await f.workspace();assert.equal(w.units[0].origin,'Keep origin');assert.equal(w.units[1].origin,'Kallo');assert.equal(w.units[399].destination,'Zeebrugge');assert.equal(w.units[0].vin,vin(1));assert.equal(w.units[0].notes,'Keep notes');assert.equal(w.units[0].price,'95.50');
+  r=await f.request(`/api/projects/${f.p}/units/bulk`,'POST',{unitIds:ids,changes:[{field:'origin',mode:'fill',value:'Other'}]});assert.deepEqual(r.data,{updated:0,unchanged:400});
+  r=await f.request(`/api/projects/${f.p}/units/bulk`,'POST',{unitIds:[ids[0]],changes:[{field:'price',mode:'clear'}]});assert.equal(r.status,200);assert.equal((await f.workspace()).units[0].price,'');assert.equal((await f.workspace()).units[1].price,'95.50');
+});
+test('Bulk edits validate every vehicle before writing and reject cross-project IDs and protected fields',async t=>{
+  const f=await fixture(t);await f.importRows([{vin:vin(1)},{vin:vin(2),atd:'2026-10-13T08:00:00Z'}]);let w=await f.workspace(),ids=w.units.map(u=>u.id);
+  const endpoint=`/api/projects/${f.p}/units/bulk`;
+  assert.equal((await f.request(endpoint,'POST',{unitIds:ids,changes:[{field:'ata',mode:'set',value:'2026-10-12T08:00:00Z'}]})).status,400);assert.ok((await f.workspace()).units.every(u=>!u.ata));
+  for(const changes of [[{field:'vin',mode:'set',value:vin(3)}],[{field:'load_id',mode:'set',value:'fake'}],[{field:'origin',mode:'set',value:''}],[{field:'t1',mode:'set',value:'maybe'}],[{field:'origin',mode:'set',value:'Kallo'},{field:'origin',mode:'set',value:'Other'}]])assert.equal((await f.request(endpoint,'POST',{unitIds:ids,changes})).status,400);
+  const {data:p2}=await f.request('/api/projects','POST',{name:'Other project'});await f.request(`/api/projects/${p2.id}/import`,'POST',{packingList:'Other',rows:[{vin:vin(10)}]});const {data:w2}=await f.request(`/api/projects/${p2.id}/workspace`);
+  assert.equal((await f.request(endpoint,'POST',{unitIds:[ids[0],w2.units[0].id],changes:[{field:'origin',mode:'set',value:'Kallo'}]})).status,404);assert.equal((await f.workspace()).units[0].origin,'');
+});

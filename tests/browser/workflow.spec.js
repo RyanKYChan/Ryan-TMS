@@ -62,3 +62,40 @@ test('Sample project has working load cards and clearly marked demonstration dat
   await page.screenshot({path:'.local/screenshots/desktop.png',fullPage:true});
   await page.getByRole('button',{name:'Import units',exact:true}).click();await page.getByLabel('Packing list name *').fill('Test paste');await page.getByLabel('Paste sheet data').fill('LSFAM11A1RA000099');await page.getByRole('button',{name:'Review data'}).click();await page.screenshot({path:'.local/screenshots/import.png',fullPage:true});
 });
+test('The customer’s raw table fills Loading / Unloading addresses and city/postcode automatically',async({page})=>{
+  await page.getByRole('button',{name:'Import units',exact:true}).click();await page.getByLabel('Packing list name *').fill('Generic packing list');
+  await page.getByLabel('Paste sheet data').fill('| VIN No | Model | Loading | Unloading |\n| --- | --- | --- | --- |\n| LB3P11SD4TH395104 | P145 | Pantank Haven 1223, Hazopweg 163, 9130 Kallo | Canada quay 527, CLdN Ports Zeebrugge NV, Barlenhuisstraat 2, 8380 Zeebrugge |');
+  await expect(page.getByText('4 columns recognised',{exact:true})).toBeVisible();await page.getByRole('button',{name:'Review data'}).click();
+  await expect(page.locator('.preview-table')).toContainText('Kallo');await expect(page.locator('.preview-table')).toContainText('Zeebrugge');await page.getByRole('button',{name:'Import 1 units'}).click();await expect(page.getByRole('dialog')).toHaveCount(0);
+  await page.getByRole('button',{name:/^Unit register/}).click();await page.getByRole('button',{name:'LB3P11SD4TH395104',exact:true}).click();
+  const pol=page.getByRole('dialog').locator('.form-grid').nth(1),pod=page.getByRole('dialog').locator('.form-grid').nth(2);
+  await expect(pol.getByLabel('City',{exact:true})).toHaveValue('Kallo');await expect(pol.getByLabel('Postcode',{exact:true})).toHaveValue('9130');await expect(pol.getByLabel('Address',{exact:true})).toHaveValue('Pantank Haven 1223, Hazopweg 163, 9130 Kallo');
+  await expect(pod.getByLabel('City',{exact:true})).toHaveValue('Zeebrugge');await expect(pod.getByLabel('Postcode',{exact:true})).toHaveValue('8380');
+});
+test('Shared import details fill a VIN-only list and retain supplied cells',async({page})=>{
+  await page.getByRole('button',{name:'Import units',exact:true}).click();await page.getByLabel('Packing list name *').fill('Shared route');
+  await page.getByLabel('Paste sheet data').fill('VIN No\tPOL-CITY\nLSFAM11A1RA000001\tAntwerp\nLSFAM11A1RA000002\t');
+  await page.getByText('Shared POL / POD details · fill missing cells for the whole list',{exact:true}).click();
+  await page.getByLabel('POL city',{exact:true}).fill('Kallo');await page.getByLabel('POD address',{exact:true}).fill('Port road, 8380 Zeebrugge');
+  await page.getByRole('button',{name:'Review data'}).click();await page.getByRole('button',{name:'Import 2 units'}).click();await expect(page.getByRole('dialog')).toHaveCount(0);
+  const p=await page.getByLabel('Active project').inputValue();const w=await (await page.request.get(`/api/projects/${p}/workspace`)).json();
+  expect(w.units.find(u=>u.vin.endsWith('000001')).origin).toBe('Antwerp');expect(w.units.find(u=>u.vin.endsWith('000002')).origin).toBe('Kallo');expect(w.units.every(u=>u.destination==='Zeebrugge')).toBe(true);
+});
+test('A custom header mapping is remembered for the next packing list',async({page})=>{
+  for(const [i,vin] of ['LSFAM11A1RA000001','LSFAM11A1RA000002'].entries()){
+    await page.getByRole('button',{name:'Import units',exact:true}).click();await page.getByLabel('Packing list name *').fill(`Custom ${i}`);await page.getByLabel('Paste sheet data').fill(`VIN No\tArrival yard\n${vin}\tPort road, 8380 Zeebrugge`);await page.getByRole('button',{name:'Review data'}).click();
+    if(i===0)await page.getByLabel('Arrival yard',{exact:true}).selectOption('pod_address');
+    else await expect(page.getByLabel('Arrival yard',{exact:true})).toHaveValue('pod_address');
+    await page.getByRole('button',{name:'Import 1 units'}).click();await expect(page.getByRole('dialog')).toHaveCount(0);
+  }
+  const p=await page.getByLabel('Active project').inputValue();const w=await (await page.request.get(`/api/projects/${p}/workspace`)).json();expect(w.units.length).toBe(2);expect(w.units.every(u=>u.destination==='Zeebrugge')).toBe(true);
+});
+test('Bulk editing all matching vehicles spans pages and preserves fields not selected',async({page})=>{
+  const p=await page.getByLabel('Active project').inputValue();
+  await page.request.post(`/api/projects/${p}/import`,{data:{packingList:'Bulk list',rows:Array.from({length:51},(_,i)=>({vin:`LSFAM11A1RA${String(i+1).padStart(6,'0')}`,origin:i===0?'Existing origin':'',notes:'Keep notes'}))}});
+  await page.getByRole('button',{name:'Refresh workspace'}).click();await page.getByRole('button',{name:/^Unit register/}).click();await page.getByRole('checkbox',{name:'Select this page'}).check();await page.getByRole('button',{name:'Select all 51 matching vehicles'}).click();await page.getByRole('button',{name:'Bulk edit',exact:true}).click();
+  await expect(page.getByRole('heading',{name:'Bulk edit 51 vehicles'})).toBeVisible();await page.getByLabel('Action 1').selectOption('fill');await page.getByLabel('Value 1').fill('Kallo');
+  await page.getByRole('button',{name:'Add another field'}).click();await page.getByLabel('Field 2',{exact:true}).selectOption('destination');await page.getByLabel('Value 2',{exact:true}).fill('Zeebrugge');
+  await expect(page.getByRole('button',{name:'Apply to 51 vehicles'})).toBeEnabled();await page.screenshot({path:'.local/screenshots/bulk-edit.png',fullPage:true});await page.getByRole('button',{name:'Apply to 51 vehicles'}).click();await expect(page.getByRole('dialog')).toHaveCount(0);
+  const w=await (await page.request.get(`/api/projects/${p}/workspace`)).json();expect(w.units[0].origin).toBe('Existing origin');expect(w.units[50].origin).toBe('Kallo');expect(w.units.every(u=>u.destination==='Zeebrugge'&&u.notes==='Keep notes')).toBe(true);
+});

@@ -29,6 +29,29 @@ export function validateUnit(unit) {
   if(unit.t1 && !['yes','no'].includes(unit.t1))return 'T1 must be yes, no, or blank.';
   return null;
 }
+export const BULK_FIELDS=FIELDS.filter(f=>f!=='vin');
+export function planBulkEdit(units,changes){
+  if(!Array.isArray(changes)||!changes.length||changes.length>BULK_FIELDS.length)throw new Error('Choose at least one field to change.');
+  const seen=new Set();
+  const validated=changes.map(change=>{
+    if(!change||!BULK_FIELDS.includes(change.field)||seen.has(change.field))throw new Error('Choose unique editable fields. VIN and load assignment cannot be bulk edited.');
+    seen.add(change.field);
+    if(!['set','fill','clear'].includes(change.mode))throw new Error('Choose Set value, Fill blanks, or Clear.');
+    const value=change.mode==='clear'?'':change.value;
+    if(typeof value!=='string'||value.length>(change.field==='notes'?2000:500))throw new Error(`Invalid value for ${change.field}.`);
+    if(change.mode!=='clear'&&!value.trim())throw new Error(`Enter a value for ${change.field}, or choose Clear.`);
+    return {...change,value:value.trim()};
+  });
+  return units.map(unit=>{
+    const update={};
+    for(const c of validated){
+      if(c.mode==='fill'&&unit[c.field])continue;
+      if(unit[c.field]!==c.value)update[c.field]=c.value;
+    }
+    const error=validateUnit({...unit,...update});if(error)throw new Error(`${unit.vin}: ${error}`);
+    return {unit,update};
+  });
+}
 export function exportCsv(rows) {
   const headers=['Brand','VIN','Model','Reference','Status','Comments','POL-COUNTRY','POL-CTY','POL-ZIPCODE','POL-ADDRESS','POD-COUNTRY','POD-CITY','POD-ZIPCODE','POD-ADDRESS','Dealer name','ETD','ATD','ETA','ATA','Carrier','Truck plate','Price(EUR)','T1','Packing list','Load','Sheet status'];
   const fields=['brand','vin','model','reference','status','notes','pol_country','origin','pol_zipcode','pol_address','pod_country','destination','pod_zipcode','pod_address','dealer','etd','atd','eta','ata','carrier','truck','price','t1','packing_list','load_ref','source_status'];

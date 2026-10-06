@@ -1,8 +1,11 @@
 export const columns: [string,string][];
-export type Grid = {headers:string[];mapping:string[];rows:string[][];hasHeaders:boolean};
-export type ImportPreview = {unit:Record<string,string>;errors:string[];index:number;existing:boolean};
+export type Grid = {headers:string[];mapping:string[];rows:string[][];hasHeaders:boolean;skippedRows?:number};
+export type ImportPreview = {unit:Record<string,string>;errors:string[];index:number;existing:boolean;defaulted:string[];inferred:string[]};
+export function inferAddressDetails(address:string,side:string):Record<string,string>;
+export function normalizeHeader(s:string):string;
+export function matchHeader(header:string,saved?:Record<string,string>):string;
 export function parseGrid(raw:string):string[][];
-export function inspectGrid(raw:string):Grid;
+export function inspectGrid(raw:string,options?:{headerMode?:string;savedMappings?:Record<string,string>}):Grid;
 export function parseDate(value:string,order?:string):string;
 export function parsePrice(value:string):string;
-export function previewRows(grid:string[][],mapping:string[],existing?:{vin:string}[],order?:string):ImportPreview[];
+export function previewRows(grid:string[][],mapping:string[],existing?:{vin:string}[],order?:string,defaults?:Record<string,string>):ImportPreview[];

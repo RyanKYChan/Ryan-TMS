@@ -1,4 +1,4 @@
-RYAN TMS - Open the dashboard on your Windows computer
+RYAN TMS v0.2.0 - Open the dashboard on your Windows computer
 
 1. Install Node.js version 24 from https://nodejs.org if you do not have it.
 2. Extract the entire ZIP file to a folder on your computer.
@@ -13,6 +13,20 @@ The dashboard includes:
 - Load builds: create loads and assign vehicles.
 - Unit register: track ETD, ETA, ATD, ATA, T1 and your other sheet fields.
 - Explore a sample project: try clearly labelled demonstration data first.
+- Bulk edit: select vehicles in Unit register and edit shared fields together.
+- Generic imports: VIN No, Model, Loading and Unloading are recognised.
+
+UPDATING A PREVIOUS INSTALLATION
+Close the app's command window before updating.
+Make a backup copy of your existing data folder.
+Extract this ZIP into the SAME parent folder so the Ryan-TMS folder merges
+with your existing Ryan-TMS folder. Replace application files when asked.
+DO NOT delete the old folder or its data directory first.
+This ZIP contains no data folder and does not replace your existing database.
+Start START-TMS.cmd again, refresh Edge, and check v0.2.0 in the footer.
+
+To repair an earlier packing list import, re-paste it with the same name.
+Matching VINs update in place; you do not need to recreate the vehicles.
 
 Your real Maxus project starts empty, with a planning target of 400 units.
 Your data saves to data/tms.sqlite in this extracted folder.

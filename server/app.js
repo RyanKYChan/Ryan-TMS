@@ -1,6 +1,6 @@
 import express from 'express';
 import { randomUUID } from 'node:crypto';
-import { FIELDS, cleanVin, validateVin, validateUnit, status, exportCsv } from './domain.js';
+import { FIELDS, cleanVin, validateVin, validateUnit, status, exportCsv, planBulkEdit } from './domain.js';
 import { transaction } from './db.js';
 
 export function createApp(db) {
@@ -71,6 +71,19 @@ export function createApp(db) {
       return {added,updated};
     });
     res.status(201).json(result);
+  });
+  app.post('/api/projects/:p/units/bulk', (req,res) => {
+    const p=project(req.params.p).id,ids=req.body.unitIds;
+    if(!Array.isArray(ids)||!ids.length||ids.length>10000||ids.some(id=>typeof id!=='string')||new Set(ids).size!==ids.length)fail('Select between 1 and 10,000 unique units.');
+    const selected=ids.map(id=>unitById(p,id));
+    let plan;try{plan=planBulkEdit(selected,req.body.changes);}catch(e){fail(e.message);}
+    let updated=0;
+    transaction(db,()=>{for(const {unit,update} of plan){
+      const entries=Object.entries(update);if(!entries.length)continue;
+      db.prepare(`UPDATE units SET ${entries.map(([f])=>`${f}=?`).join(',')},updated_at=? WHERE id=?`).run(...entries.map(([,v])=>v),now(),unit.id);
+      event(p,unit.id,`Bulk updated ${unit.vin}: ${entries.map(([f])=>f.toUpperCase()).join(', ')}`);updated++;
+    }});
+    res.json({updated,unchanged:ids.length-updated});
   });
   app.patch('/api/projects/:p/units/:id', (req,res) => {
     const p=project(req.params.p).id,old=unitById(p,req.params.id), update={};

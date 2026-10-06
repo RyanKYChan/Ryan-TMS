@@ -26,6 +26,7 @@ export function Field({label,children}:{label:string;children:ReactNode}){
     return Children.map(nodes,node=>{
       if(!isValidElement<{children?:ReactNode;id?:string;'aria-labelledby'?:string}>(node))return node;
       if(['input','select','textarea'].includes(String(node.type)))return cloneElement(node,{id,'aria-labelledby':`${id}-label`});
+      if(typeof node.type==='function')return cloneElement(node,{id,'aria-labelledby':`${id}-label`});
       if(node.props.children)return cloneElement(node,{},link(node.props.children));return node;
     });
   }
