@@ -11,7 +11,11 @@ export function createApp(db) {
   app.use(express.json({ limit: '2mb' }));
   const now = () => new Date().toISOString();
   const fail = (message, code = 400) => { const e = new Error(message); e.status = code; throw e; };
-  const project = id => db.prepare('SELECT * FROM projects WHERE id=?').get(id) || fail('Project not found.',404);
+  const projectSummary = p => {
+    const imported_count=db.prepare('SELECT count(*) AS n FROM units WHERE project_id=?').get(p.id).n;
+    return {...p,estimated_target:p.target,imported_count,target:p.volume_mode==='packing_list'?imported_count:p.target};
+  };
+  const project = id => projectSummary(db.prepare('SELECT * FROM projects WHERE id=?').get(id) || fail('Project not found.',404));
   const event = (p, u, description) => db.prepare('INSERT INTO events VALUES(?,?,?,?,?)').run(randomUUID(),p,u,description,now());
   const text = (v, max=500) => typeof v === 'string' && v.length <= max ? v.trim() : fail(`Text must be at most ${max} characters.`);
   const count = (v,min,max) => Number.isInteger(v) && v>=min && v<=max ? v : fail(`Enter a whole number between ${min} and ${max}.`);
@@ -21,12 +25,32 @@ export function createApp(db) {
   const unitById = (p,id) => db.prepare('SELECT * FROM units WHERE project_id=? AND id=?').get(p,id) || fail('Unit not found.',404);
   const loadById = (p,id) => db.prepare('SELECT * FROM loads WHERE project_id=? AND id=?').get(p,id) || fail('Load not found.',404);
   app.get('/api/health', (_req,res) => { db.prepare('SELECT 1').get(); res.json({ok:true}); });
-  app.get('/api/projects', (_req,res) => res.json(db.prepare('SELECT * FROM projects ORDER BY created_at').all()));
+  app.get('/api/projects', (_req,res) => res.json(db.prepare('SELECT * FROM projects ORDER BY created_at').all().map(projectSummary)));
   app.post('/api/projects', (req,res) => {
     const name = text(req.body.name,100); if (!name) fail('Project name is required.');
     const p = {id:randomUUID(),name,customer:text(req.body.customer ?? '',100),target:count(req.body.target ?? 400,1,100000),created_at:now()};
     db.prepare('INSERT INTO projects(id,name,customer,target,created_at) VALUES(?,?,?,?,?)').run(p.id,p.name,p.customer,p.target,p.created_at);
     res.status(201).json(project(p.id));
+  });
+  app.patch('/api/projects/:p', (req,res) => {
+    const p=project(req.params.p),update={};
+    for(const f of ['name','customer'])if(req.body[f]!==undefined)update[f]=text(req.body[f],100);
+    if(update.name==='')fail('Project name is required.');
+    if(req.body.target!==undefined)update.target=count(req.body.target,1,100000);
+    if(req.body.volume_mode!==undefined){if(!['estimate','packing_list'].includes(req.body.volume_mode))fail('Choose an estimate or the packing-list total.');update.volume_mode=req.body.volume_mode;}
+    const entries=Object.entries(update);if(!entries.length)fail('No project settings to update.');
+    transaction(db,()=>{
+      db.prepare(`UPDATE projects SET ${entries.map(([f])=>`${f}=?`).join(',')} WHERE id=?`).run(...entries.map(([,v])=>v),p.id);
+      event(p.id,null,`Project settings updated: ${entries.map(([f])=>f).join(', ')}`);
+    });res.json(project(p.id));
+  });
+  app.delete('/api/projects/:p', (req,res) => {
+    const p=project(req.params.p);
+    if(req.body?.confirmName!==p.name)fail('Type the current project name to confirm deletion.');
+    transaction(db,()=>{
+      for(const table of ['schedule_alerts','events','carrier_updates','units','loads','packing_lists','carriers'])db.prepare(`DELETE FROM ${table} WHERE project_id=?`).run(p.id);
+      db.prepare('DELETE FROM projects WHERE id=?').run(p.id);
+    });res.json({deleted:p.id});
   });
   app.get('/api/projects/:p/workspace', (req,res) => {
     const p=project(req.params.p);

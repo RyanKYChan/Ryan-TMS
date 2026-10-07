@@ -263,3 +263,47 @@ test('Operational totals exclude empty inferred history and keep mixed-date and 
   assert.equal(operationalLoads(loads,units).length,2);assert.equal(loadStatus(loads[1],units),'scheduled');
   units[1].reference='Booking';assert.equal(loadStatus(loads[1],units),'ready');units[0].atd='2026-10-12T08:00:00Z';assert.equal(loadStatus(loads[1],units),'in_transit');
 });
+
+test('Project settings rename and change estimates or follow unique packing-list totals without touching records',async t=>{
+  const f=await fixture(t);await f.importRows([{vin:vin(1),notes:'Preserve',price:'95.50'},{vin:vin(2)}]);
+  const before=await f.workspace(),path=`/api/projects/${f.p}`;
+  assert.equal(before.project.target,400);assert.equal(before.project.estimated_target,400);assert.equal(before.project.volume_mode,'estimate');
+  let r=await f.request(path,'PATCH',{name:'Renamed spot',customer:'New brand',target:350});assert.equal(r.status,200);assert.equal(r.data.name,'Renamed spot');assert.equal(r.data.target,350);
+  assert.deepEqual((await f.workspace()).units,before.units);
+  r=await f.request(path,'PATCH',{volume_mode:'packing_list'});assert.equal(r.data.target,2);assert.equal(r.data.estimated_target,350);assert.equal(r.data.imported_count,2);
+  await f.importRows([{vin:vin(1),notes:'Preserve'},{vin:vin(3)}],'Second packing list');let w=await f.workspace();assert.equal(w.project.target,3);assert.equal(w.packingLists.length,2);
+  assert.equal((await f.request('/api/projects')).data.find(p=>p.id===f.p).target,3);
+  await f.importRows([{vin:vin(1)}],'Second packing list');w=await f.workspace();assert.equal(w.project.target,3);assert.equal(w.units.length,3);
+  r=await f.request(path,'PATCH',{volume_mode:'estimate'});assert.equal(r.data.target,350);
+  const stable=await f.workspace();for(const patch of [{name:''},{name:'No partial rename',target:-1},{target:1.5},{volume_mode:'invalid'}])assert.equal((await f.request(path,'PATCH',patch)).status,400);
+  assert.deepEqual(await f.workspace(),stable);assert.equal((await f.request('/api/projects/missing','PATCH',{target:5})).status,404);
+  const {data:empty}=await f.request('/api/projects','POST',{name:'Zero imported units'});assert.equal((await f.request(`/api/projects/${empty.id}`,'PATCH',{volume_mode:'packing_list'})).data.target,0);
+});
+
+test('Deleting a populated project requires its current name, removes all dependent records, and preserves other projects',async t=>{
+  const f=await fixture(t);await f.importRows([{vin:vin(1),carrier:'Delete carrier'},{vin:vin(2),carrier:'Delete carrier'}]);
+  let w=await f.workspace();const c=w.carriers[0],path=`/api/projects/${f.p}/carriers/${c.id}/updates`;
+  const body={groupLoads:true,rows:[1,2].map(i=>({vin:vin(i),group:'one',etd:'2026-10-12T08:00:00Z',eta:'2026-10-13T08:00:00Z'}))};
+  let review=(await f.request(path+'/preview','POST',body)).data;await f.request(path,'POST',{...body,snapshot:review.snapshot});
+  const changed={...body,rows:body.rows.map(r=>({...r,eta:'2026-10-14T08:00:00Z'}))};review=(await f.request(path+'/preview','POST',changed)).data;await f.request(path,'POST',{...changed,snapshot:review.snapshot});
+  const {data:other}=await f.request('/api/projects','POST',{name:'Keep other project'});await f.request(`/api/projects/${other.id}/import`,'POST',{packingList:'Keep list',rows:[{vin:vin(1),carrier:'Keep carrier',price:'25'}]});
+  const otherBefore=(await f.request(`/api/projects/${other.id}/workspace`)).data;
+  w=await f.workspace();assert.equal(w.scheduleAlerts.length,2);assert.equal(w.carrierUpdates.length,2);assert.equal(w.loads.length,1);
+  for(const body of [undefined,{}, {confirmName:'wrong'}])assert.equal((await f.request(`/api/projects/${f.p}`,'DELETE',body)).status,400);
+  assert.deepEqual(await f.workspace(),w);
+  await f.request(`/api/projects/${f.p}`,'PATCH',{name:'New deletion name'});assert.equal((await f.request(`/api/projects/${f.p}`,'DELETE',{confirmName:w.project.name})).status,400);
+  assert.equal((await f.request(`/api/projects/${f.p}`,'DELETE',{confirmName:'New deletion name'})).status,200);
+  for(const table of ['schedule_alerts','events','carrier_updates','units','loads','packing_lists','carriers'])assert.equal(f.db.prepare(`SELECT count(*) AS n FROM ${table} WHERE project_id=?`).get(f.p).n,0,table);
+  assert.equal((await f.request(`/api/projects/${f.p}/workspace`)).status,404);assert.deepEqual((await f.request(`/api/projects/${other.id}/workspace`)).data,otherBefore);
+});
+
+test('Deleting the last project leaves an empty workspace across database restarts, and a new project can be created',async t=>{
+  const directory=mkdtempSync(join(tmpdir(),'tms-delete-')),filename=join(directory,'tms.sqlite');t.after(()=>rmSync(directory,{recursive:true,force:true}));
+  let db=openDb(filename),server=createApp(db).listen(0,'127.0.0.1');await new Promise(r=>server.once('listening',r));
+  const base=`http://127.0.0.1:${server.address().port}`,p=db.prepare('SELECT * FROM projects').get();
+  const response=await fetch(base+`/api/projects/${p.id}`,{method:'DELETE',headers:{'Content-Type':'application/json'},body:JSON.stringify({confirmName:p.name})});assert.equal(response.status,200);
+  assert.deepEqual(await (await fetch(base+'/api/projects')).json(),[]);await new Promise(r=>server.close(r));db.close();
+  db=openDb(filename);assert.equal(db.prepare('SELECT count(*) AS n FROM projects').get().n,0);
+  server=createApp(db).listen(0,'127.0.0.1');await new Promise(r=>server.once('listening',r));
+  try{const r=await fetch(`http://127.0.0.1:${server.address().port}/api/projects`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:'New project after deletion',target:250})});assert.equal(r.status,201);assert.equal((await r.json()).target,250);}finally{await new Promise(r=>server.close(r));db.close();}
+});

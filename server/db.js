@@ -6,6 +6,7 @@ import { FIELDS } from './domain.js';
 export function openDb(filename) {
   if (filename !== ':memory:') mkdirSync(dirname(filename), { recursive: true });
   const db = new DatabaseSync(filename);
+  const newDatabase=!db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='projects'").get();
   db.exec(`PRAGMA foreign_keys = ON; PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 5000;
     CREATE TABLE IF NOT EXISTS projects (
       id TEXT PRIMARY KEY, name TEXT NOT NULL, customer TEXT NOT NULL DEFAULT '',
@@ -49,7 +50,7 @@ export function openDb(filename) {
     );
     CREATE INDEX IF NOT EXISTS alerts_project ON schedule_alerts(project_id,resolved_at);`);
   transaction(db,()=>{
-    const additions={units:{revenue:"TEXT NOT NULL DEFAULT ''"},loads:{cost:"TEXT NOT NULL DEFAULT ''",revenue:"TEXT NOT NULL DEFAULT ''"},projects:{cost_basis:"TEXT NOT NULL DEFAULT 'unit'",revenue_basis:"TEXT NOT NULL DEFAULT 'unit'",unit_cost:"TEXT NOT NULL DEFAULT ''",load_cost:"TEXT NOT NULL DEFAULT ''",unit_revenue:"TEXT NOT NULL DEFAULT ''",load_revenue:"TEXT NOT NULL DEFAULT ''"}};
+    const additions={units:{revenue:"TEXT NOT NULL DEFAULT ''"},loads:{cost:"TEXT NOT NULL DEFAULT ''",revenue:"TEXT NOT NULL DEFAULT ''"},projects:{volume_mode:"TEXT NOT NULL DEFAULT 'estimate'",cost_basis:"TEXT NOT NULL DEFAULT 'unit'",revenue_basis:"TEXT NOT NULL DEFAULT 'unit'",unit_cost:"TEXT NOT NULL DEFAULT ''",load_cost:"TEXT NOT NULL DEFAULT ''",unit_revenue:"TEXT NOT NULL DEFAULT ''",load_revenue:"TEXT NOT NULL DEFAULT ''"}};
     for(const [table,fields] of Object.entries(additions)){
       const known=new Set(db.prepare(`PRAGMA table_info(${table})`).all().map(c=>c.name));
       for(const [field,type] of Object.entries(fields))if(!known.has(field))db.exec(`ALTER TABLE ${table} ADD COLUMN ${field} ${type}`);
@@ -64,7 +65,7 @@ export function openDb(filename) {
   }
   const existingNames=db.prepare("SELECT project_id,carrier AS name FROM units WHERE trim(carrier)<>'' UNION SELECT project_id,carrier AS name FROM loads WHERE trim(carrier)<>''").all();
   transaction(db,()=>{for(const c of existingNames) db.prepare('INSERT OR IGNORE INTO carriers VALUES(?,?,?,?)').run(randomUUID(),c.project_id,c.name.trim(),new Date().toISOString());});
-  if (!db.prepare('SELECT id FROM projects LIMIT 1').get()) {
+  if (newDatabase && !db.prepare('SELECT id FROM projects LIMIT 1').get()) {
     db.prepare('INSERT INTO projects(id,name,customer,target,created_at) VALUES(?,?,?,?,?)')
       .run(randomUUID(), 'Maxus spot operations', 'MAXUS', 400, new Date().toISOString());
   }

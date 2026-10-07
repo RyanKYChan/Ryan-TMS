@@ -1,4 +1,4 @@
-RYAN TMS v0.5.0 - Open the dashboard on your Windows computer
+RYAN TMS v0.6.0 - Open the dashboard on your Windows computer
 
 1. Install Node.js version 24 from https://nodejs.org if you do not have it.
 2. Extract the entire ZIP file to a folder on your computer.
@@ -8,6 +8,9 @@ RYAN TMS v0.5.0 - Open the dashboard on your Windows computer
 6. Keep the command window open while using the app.
 
 The dashboard includes:
+- Project settings: rename the project and edit its customer/brand.
+- Volume settings: edit the estimate or follow packing-list VIN totals.
+- Delete project: type its name to confirm deleting its records.
 - Calendar: planned pickups, deliveries, month navigation and carrier filter.
 - Pricing & analysis: project cost/revenue per load or unit, with bulk rates.
 - Ready to go: Reference / Appointment # added; actual stages take precedence.
@@ -33,7 +36,22 @@ Extract this ZIP into the SAME parent folder so the Ryan-TMS folder merges
 with your existing Ryan-TMS folder. Replace application files when asked.
 DO NOT delete the old folder or its data directory first.
 This ZIP contains no data folder and does not replace your existing database.
-Start START-TMS.cmd again, refresh Edge, and check v0.5.0 in the footer.
+Start START-TMS.cmd again, refresh Edge, and check v0.6.0 in the footer.
+
+TO EDIT PROJECT NAME OR VOLUME
+Open Project settings next to Import units on the dashboard.
+Edit Project name, Customer / brand or Estimated units, then save.
+Choose "Use the packing-list total automatically" to base progress on the
+actual unique VIN count. The original estimate is kept for switching back.
+Repeated VINs are not counted twice; new VIN imports update the total.
+The imported count is the real number of VIN records, separate from estimates.
+
+TO DELETE A PROJECT
+Open Project settings, then Delete project.
+The confirmation shows what will be removed. Back up your data folder first
+if you may need to recover the project. CSV export contains units only.
+Type the current project name, then Permanently delete project.
+Other projects stay saved. You can create a new project if none remain.
 
 TO USE PROJECT LOAD PRICING
 Open Pricing & analysis. Choose Cost basis = Per load.

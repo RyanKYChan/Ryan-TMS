@@ -37,7 +37,7 @@ Install Node.js 24 from https://nodejs.org/en/download, extract the archive, and
 
 **Updating:** Close the old app first. Back up its `data` folder. Extract into the same parent folder so the new `Ryan-TMS` folder merges with the existing folder, replacing application files. Do not delete the old folder or its `data` directory. The ZIP contains no databases. Restart the launcher and check v{version} in the footer.
 
-This update adds a pickup/delivery calendar, project and bulk load/unit costs and revenue with margin analysis, a Ready to go stage, persistent carrier schedule-change alerts with affected VINs and loads, and project-wide scheduled load totals. Existing data is retained when updating as described above.
+This update adds project settings: edit the name/customer, change the estimate or automatically use the unique packing-list VIN total, and delete a project after typing its name. Deletion affects only that project. Existing data is retained when updating as described above.
 
 SHA-256: `{digest}`
 ''')

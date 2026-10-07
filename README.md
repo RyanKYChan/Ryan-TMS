@@ -4,7 +4,7 @@ A mini TMS for vehicle spot transport and shunting, starting with a Maxus projec
 
 ## Open it on your Windows computer
 
-[Download the v0.5.0 Windows ZIP](https://github.com/RyanKYChan/Ryan-TMS/raw/refs/heads/main/downloads/ryan-tms-windows-v0.5.0.zip)
+[Download the v0.6.0 Windows ZIP](https://github.com/RyanKYChan/Ryan-TMS/raw/refs/heads/main/downloads/ryan-tms-windows-v0.6.0.zip)
 
 ChatGPT's cloud environment page does not expose the web app. The server must run on your own computer, or the app needs a separate hosted deployment. Opening the HTML files directly does not start the API.
 
@@ -14,7 +14,7 @@ The launcher can also be run using `npm run open` after dependencies and the pro
 
 ## Update an existing Windows installation
 
-Close the app's command window first. Make a backup copy of your existing `data` folder. Extract the new ZIP into the same parent folder so its `Ryan-TMS` folder merges with your current `Ryan-TMS` folder; replace application files when prompted. **Do not delete the old folder or its `data` directory.** The ZIP contains no database or `data` folder, so merging it does not replace your existing packing lists. Start `START-TMS.cmd` again and refresh Edge. Version 0.5.0 appears in the footer. Existing packing lists, notes, dates, and load assignments are retained; the database gains load pricing, unit revenue, project rates, and saved schedule alerts automatically. Existing unit prices remain unit costs.
+Close the app's command window first. Make a backup copy of your existing `data` folder. Extract the new ZIP into the same parent folder so its `Ryan-TMS` folder merges with your current `Ryan-TMS` folder; replace application files when prompted. **Do not delete the old folder or its `data` directory.** The ZIP contains no database or `data` folder, so merging it does not replace your existing packing lists. Start `START-TMS.cmd` again and refresh Edge. Version 0.6.0 appears in the footer. Existing packing lists, notes, dates, and load assignments are retained; the database gains project volume settings automatically. Existing unit prices remain unit costs.
 
 You can re-paste an existing packing list with its original name to fill previously missed columns. Matching VINs update in place rather than creating duplicates.
 
@@ -88,6 +88,17 @@ For a sheet with twelve dated/trucked groups of six VINs followed by 128 unplann
 **Carriers** remains available for allocation, copying VINs, milestone coverage, and sheet check history. Its paste area uses the same full-sheet rules. **Load builds** displays the whole selected carrier batch with brand/model, reference/appointment, comments, POL/POD details, truck plate, and ETD/ATD/ETA/ATA. The overview and carrier comparison include progress and the not-load-built count.
 
 Google Sheets checks remain manual copy/paste. The [carrier sheet template](templates/carrier-sheet.tsv) supplies a reusable header row.
+
+## Project settings (v0.6.0)
+
+Open **Project settings** beside Import units on any project page.
+
+- Edit the project name and customer/brand at any time. VINs, loads, dates, prices and carrier allocations stay attached to the same project.
+- **Use an editable estimate** lets you raise or lower the estimated unit volume. Dashboard delivery progress uses that target.
+- **Use the packing-list total automatically** uses the current unique VIN count across all packing lists as the target, including when the final quantity is lower than the original estimate. New VIN imports update it automatically; re-pasting existing VINs does not increase it. Your estimate is retained so you can switch back. An empty project correctly shows zero in this mode.
+- The **Total imported** figure is always the number of vehicle records. Changing the target does not create or remove VINs; VINs omitted from a repeat paste remain saved.
+- **Delete project** opens a confirmation showing the records to be removed. Type the current project name and choose **Permanently delete project**. This removes that project's VINs, packing lists, loads, carriers, rates, sheet checks, schedule alerts and activity in one transaction. Other projects are preserved. Back up your data folder beforehand if you need to recover it; the optional CSV export contains the unit register only.
+- After deletion, the app selects a remaining project. If none remain, it shows **Create your first project**. Deleted projects are not recreated on restart.
 
 ## Calendar, pricing and schedule changes (v0.5.0)
 

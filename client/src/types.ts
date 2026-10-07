@@ -1,5 +1,5 @@
 export type Stage = 'unscheduled' | 'scheduled' | 'ready' | 'in_transit' | 'delivered';
-export type Project = { id:string; name:string; customer:string; target:number; created_at:string;cost_basis:'unit'|'load';revenue_basis:'unit'|'load';unit_cost:string;load_cost:string;unit_revenue:string;load_revenue:string };
+export type Project = { id:string; name:string; customer:string; target:number; estimated_target:number; imported_count:number; volume_mode:'estimate'|'packing_list'; created_at:string;cost_basis:'unit'|'load';revenue_basis:'unit'|'load';unit_cost:string;load_cost:string;unit_revenue:string;load_revenue:string };
 export type Unit = {
   id:string; project_id:string; vin:string; brand:string; model:string; reference:string; source_status:string;
   notes:string; pol_country:string; origin:string; pol_zipcode:string; pol_address:string;
