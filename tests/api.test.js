@@ -206,3 +206,60 @@ test('A partial paste cannot grow an inferred load beyond the 500-VIN limit',asy
   const r=await f.preview({groupLoads:true,rows:[{vin:vin(1),group:'0'},{vin:vin(501),group:'0'}]});assert.equal(r.status,400);assert.match(r.data.error,/maximum of 500/);
   const w=await f.workspace();assert.equal(w.units.filter(u=>u.load_id).length,500);assert.equal(w.loads[0].capacity,500);
 });
+
+test('Readiness is a separate reference stage, with actual milestones taking precedence',async t=>{
+  const f=await fixture(t);await f.importRows([{vin:vin(1),truck:'TEST-01'},{vin:vin(2),reference:'Appointment-2'},{vin:vin(3),reference:'Appointment-3',atd:'2026-10-10T08:00:00Z'},{vin:vin(4),reference:'Appointment-4',ata:'2026-10-11T08:00:00Z'}]);
+  assert.deepEqual((await f.workspace()).units.map(u=>u.status),['scheduled','ready','in_transit','delivered']);
+  const {data:l}=await f.request(`/api/projects/${f.p}/loads`,'POST',{reference:'Generated reference'});
+  await f.request(`/api/projects/${f.p}/loads/${l.id}/assign`,'POST',{unitIds:[(await f.workspace()).units[0].id]});
+  assert.equal((await f.workspace()).units[0].status,'scheduled');
+});
+
+test('Project rates fill or replace selected bases without double counting, and future imports inherit defaults',async t=>{
+  const {financeReport}=await import('../server/finance-report.js');const f=await fixture(t);
+  await f.importRows([{vin:vin(1),price:'90'},{vin:vin(2),price:'100',revenue:'120'}]);
+  const {data:l}=await f.request(`/api/projects/${f.p}/loads`,'POST',{reference:'Priced load'});
+  await f.request(`/api/projects/${f.p}/loads/${l.id}/assign`,'POST',{unitIds:(await f.workspace()).units.map(u=>u.id)});
+  const rates={cost_basis:'load',revenue_basis:'unit',unit_cost:'95',load_cost:'500',unit_revenue:'300',load_revenue:'800'};
+  const path=`/api/projects/${f.p}/rates`;assert.equal((await f.request(path,'POST',{rates,apply:'fill'})).status,200);
+  let w=await f.workspace();assert.deepEqual(w.units.map(u=>u.price),['90','100']);assert.deepEqual(w.units.map(u=>u.revenue),['300','120']);assert.equal(w.loads[0].cost,'500');
+  let report=financeReport(w.project,w.loads,w.units);assert.equal(report.totals.cost,50000);assert.equal(report.totals.revenue,42000);assert.equal(report.totals.margin,-8000);
+  await f.request(path,'POST',{rates,apply:'replace'});w=await f.workspace();report=financeReport(w.project,w.loads,w.units);assert.equal(report.totals.revenue,60000);assert.equal(report.totals.margin,10000);
+  await f.importRows([{vin:vin(3)}]);w=await f.workspace();assert.equal(w.units[2].price,'95');assert.equal(w.units[2].revenue,'300');
+  const fresh=await f.request(`/api/projects/${f.p}/loads`,'POST',{reference:'Next priced load'});assert.equal(fresh.data.cost,'500');assert.equal(fresh.data.revenue,'800');
+  const before=await f.workspace();assert.equal((await f.request(path,'POST',{rates:{...rates,load_cost:'-1'},apply:'replace'})).status,400);assert.deepEqual(await f.workspace(),before);
+  assert.equal((await f.request(`/api/projects/${f.p}/loads/prices`,'POST',{loadIds:[l.id],mode:'replace',cost:'0',revenue:'900.99'})).status,200);
+  w=await f.workspace();assert.equal(w.loads.find(x=>x.id===l.id).cost,'0');assert.equal(w.loads.find(x=>x.id===l.id).revenue,'900.99');
+  const {data:other}=await f.request('/api/projects','POST',{name:'Other rates'});
+  assert.equal((await f.request(`/api/projects/${other.id}/loads/prices`,'POST',{loadIds:[l.id],mode:'replace',cost:'99'})).status,404);
+  assert.equal((await f.request(`/api/projects/${f.p}/loads/prices`,'POST',{loadIds:[l.id],mode:'fill',cost:'99'})).data.updated,0);
+});
+
+test('Carrier date changes preview VIN/load risks, persist alerts, ignore equal instants, and resolve within project',async t=>{
+  const f=await fixture(t);await f.importRows([1,2,3].map(i=>({vin:vin(i)})));
+  const {data:c}=await f.request(`/api/projects/${f.p}/carriers`,'POST',{name:'Risk test carrier'});
+  await f.request(`/api/projects/${f.p}/carriers/${c.id}/assign`,'POST',{unitIds:(await f.workspace()).units.map(u=>u.id)});
+  const rates={cost_basis:'load',revenue_basis:'load',unit_cost:'',unit_revenue:'',load_cost:'750',load_revenue:'950'};
+  await f.request(`/api/projects/${f.p}/rates`,'POST',{rates,apply:'none'});
+  const path=`/api/projects/${f.p}/carriers/${c.id}/updates`,body={groupLoads:true,rows:[1,2].map(i=>({vin:vin(i),group:'1',etd:'2026-10-12T08:00:00Z',eta:'2026-10-13T08:00:00Z'}))};
+  let preview=(await f.request(path+'/preview','POST',body)).data;assert.deepEqual(preview.risks,[]);
+  assert.equal((await f.request(path,'POST',{...body,snapshot:preview.snapshot})).status,200);
+  let w=await f.workspace();assert.equal(w.loads[0].cost,'750');assert.equal(w.loads[0].revenue,'950');
+  const changed={...body,rows:body.rows.map(r=>({...r,reference:'Booking 123',etd:'2026-10-14T08:00:00Z',eta:'2026-10-15T08:00:00Z'}))};
+  preview=(await f.request(path+'/preview','POST',changed)).data;assert.equal(preview.risks.length,4);assert.equal(preview.risks[0].deltaMinutes,2880);assert.equal(preview.risks[0].load_reference,w.loads[0].reference);
+  await f.request(path,'POST',{...changed,snapshot:preview.snapshot});w=await f.workspace();assert.equal(w.scheduleAlerts.length,4);assert.equal(w.units[0].status,'ready');
+  preview=(await f.request(path+'/preview','POST',changed)).data;assert.deepEqual(preview.risks,[]);await f.request(path,'POST',{...changed,snapshot:preview.snapshot});assert.equal((await f.workspace()).scheduleAlerts.length,4);
+  const sameTime={...changed,rows:changed.rows.map(r=>({...r,etd:'2026-10-14T10:00:00+02:00'}))};assert.deepEqual((await f.request(path+'/preview','POST',sameTime)).data.risks,[]);
+  const {data:other}=await f.request('/api/projects','POST',{name:'Other alerts'});
+  assert.equal((await f.request(`/api/projects/${other.id}/alerts/resolve`,'POST',{alertIds:[w.scheduleAlerts[0].id]})).status,404);
+  assert.equal((await f.request(`/api/projects/${f.p}/alerts/resolve`,'POST',{alertIds:w.scheduleAlerts.map(a=>a.id)})).status,200);
+  assert.equal((await f.workspace()).scheduleAlerts.filter(a=>!a.resolved_at).length,0);
+});
+
+test('Operational totals exclude empty inferred history and keep mixed-date and partially departed loads accurate',async()=>{
+  const {loadStatus,operationalLoads}=await import('../server/operations.js');
+  const loads=[{id:'a',reference:'Manual draft',notes:''},{id:'b',reference:'Current inferred',notes:'Created from carrier sheet groups'},{id:'c',reference:'Old inferred',notes:'Created from carrier sheet groups'}];
+  const units=[{load_id:'b',reference:'Booking',atd:''},{load_id:'b',truck:'TEST-01'}];
+  assert.equal(operationalLoads(loads,units).length,2);assert.equal(loadStatus(loads[1],units),'scheduled');
+  units[1].reference='Booking';assert.equal(loadStatus(loads[1],units),'ready');units[0].atd='2026-10-12T08:00:00Z';assert.equal(loadStatus(loads[1],units),'in_transit');
+});

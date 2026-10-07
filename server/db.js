@@ -41,7 +41,20 @@ export function openDb(filename) {
     CREATE TABLE IF NOT EXISTS carrier_updates (
       id TEXT PRIMARY KEY, project_id TEXT NOT NULL REFERENCES projects(id), carrier_id TEXT NOT NULL REFERENCES carriers(id),
       row_count INTEGER NOT NULL, changed_count INTEGER NOT NULL, loads_created INTEGER NOT NULL, created_at TEXT NOT NULL
-    );`);
+    );
+    CREATE TABLE IF NOT EXISTS schedule_alerts (
+      id TEXT PRIMARY KEY,project_id TEXT NOT NULL REFERENCES projects(id),carrier_id TEXT NOT NULL REFERENCES carriers(id),
+      unit_id TEXT NOT NULL REFERENCES units(id),vin TEXT NOT NULL,load_id TEXT REFERENCES loads(id),load_reference TEXT NOT NULL DEFAULT '',
+      field TEXT NOT NULL,before_value TEXT NOT NULL,after_value TEXT NOT NULL,delta_minutes INTEGER NOT NULL,created_at TEXT NOT NULL,resolved_at TEXT NOT NULL DEFAULT ''
+    );
+    CREATE INDEX IF NOT EXISTS alerts_project ON schedule_alerts(project_id,resolved_at);`);
+  transaction(db,()=>{
+    const additions={units:{revenue:"TEXT NOT NULL DEFAULT ''"},loads:{cost:"TEXT NOT NULL DEFAULT ''",revenue:"TEXT NOT NULL DEFAULT ''"},projects:{cost_basis:"TEXT NOT NULL DEFAULT 'unit'",revenue_basis:"TEXT NOT NULL DEFAULT 'unit'",unit_cost:"TEXT NOT NULL DEFAULT ''",load_cost:"TEXT NOT NULL DEFAULT ''",unit_revenue:"TEXT NOT NULL DEFAULT ''",load_revenue:"TEXT NOT NULL DEFAULT ''"}};
+    for(const [table,fields] of Object.entries(additions)){
+      const known=new Set(db.prepare(`PRAGMA table_info(${table})`).all().map(c=>c.name));
+      for(const [field,type] of Object.entries(fields))if(!known.has(field))db.exec(`ALTER TABLE ${table} ADD COLUMN ${field} ${type}`);
+    }
+  });
   // Preserve the insertion order of older packing lists when upgrading an existing database.
   if (!db.prepare('PRAGMA table_info(units)').all().some(c=>c.name==='import_order')) {
     transaction(db,()=>{

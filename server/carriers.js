@@ -1,5 +1,7 @@
 import { randomUUID, createHash } from 'node:crypto';
 import { FIELDS, cleanVin, validateVin, validateUnit, status } from './domain.js';
+import { applyLoadDefaults } from './finance.js';
+import { scheduleChanges } from './operations.js';
 import { transaction } from './db.js';
 
 export function ensureCarrier(db, projectId, name) {
@@ -43,7 +45,7 @@ export function registerCarrierRoutes(app,db,{project,units,unitById,event,fail,
   // prevents a later paste from silently overwriting changes made after review.
   function plan(p,c,body){
     const saved=units(p),loads=db.prepare('SELECT * FROM loads WHERE project_id=? ORDER BY created_at,id').all(p);
-    const snapshot=createHash('sha256').update(JSON.stringify({saved,loads})).digest('hex');
+    const snapshot=createHash('sha256').update(JSON.stringify({saved,loads,rates:project(p)})).digest('hex');
     const incoming=body.rows;
     if(!Array.isArray(incoming)||!incoming.length||incoming.length>10000)fail('Paste between 1 and 10,000 rows.');
     if(typeof body.groupLoads!=='boolean')fail('Choose whether to apply load groups.');
@@ -129,7 +131,8 @@ export function registerCarrierRoutes(app,db,{project,units,unitById,event,fail,
       if(before!==after)changes.push({field:'load',before,after});
       return {vin:r.old.vin,unitId:r.old.id,unit:finalUnit,changes,beforeStatus:status(r.old),afterStatus:status(finalUnit),loadBefore:before,loadAfter:after,notice:protectedLoad?'Existing departed/delivered load retained.':'',classification:after?'load':'pool'};
     });
-    return {planned,groups,rows,snapshot,counts:{matched:rows.length,changed:rows.filter(r=>r.changes.length).length,unchanged:rows.filter(r=>!r.changes.length).length,loadsCreated:groups.filter(g=>g.new).length,loadMoves:rows.filter(r=>r.loadBefore&&r.loadAfter&&r.loadBefore!==r.loadAfter).length,loadsReleased:rows.filter(r=>r.loadBefore&&!r.loadAfter).length,built:rows.filter(r=>r.loadAfter).length,pool:rows.filter(r=>!r.loadAfter).length}};
+    const risks=planned.flatMap((r,i)=>scheduleChanges(r.old,r.update).map(change=>({...change,vin:r.old.vin,unit_id:r.old.id,load_reference:rows[i].loadAfter||rows[i].loadBefore,carrier:c.name})));
+    return {planned,groups,rows,snapshot,risks,counts:{matched:rows.length,changed:rows.filter(r=>r.changes.length).length,unchanged:rows.filter(r=>!r.changes.length).length,loadsCreated:groups.filter(g=>g.new).length,loadMoves:rows.filter(r=>r.loadBefore&&r.loadAfter&&r.loadBefore!==r.loadAfter).length,loadsReleased:rows.filter(r=>r.loadBefore&&!r.loadAfter).length,built:rows.filter(r=>r.loadAfter).length,pool:rows.filter(r=>!r.loadAfter).length}};
   }
   app.post('/api/projects/:p/carriers/:id/updates/preview',(req,res)=>{
     const p=project(req.params.p).id,c=carrierById(p,req.params.id),result=plan(p,c,req.body);
@@ -145,9 +148,11 @@ export function registerCarrierRoutes(app,db,{project,units,unitById,event,fail,
         if(!g.new)continue;
         g.loadId=randomUUID();
         const members=planned.filter(r=>r.loadGroup===g).map(r=>({...r.old,...r.update}));
-        db.prepare('INSERT INTO loads VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)').run(g.loadId,p,g.reference,c.name,common(members,'truck'),'',members.length,common(members,'origin'),common(members,'destination'),common(members,'etd'),common(members,'eta'),'Created from carrier sheet groups',t);
+        db.prepare('INSERT INTO loads(id,project_id,reference,carrier,truck,driver,capacity,origin,destination,etd,eta,notes,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)').run(g.loadId,p,g.reference,c.name,common(members,'truck'),'',members.length,common(members,'origin'),common(members,'destination'),common(members,'etd'),common(members,'eta'),'Created from carrier sheet groups',t);
+        applyLoadDefaults(db,p,g.loadId);
         event(p,null,`Created load ${g.reference} from ${c.name}'s sheet`);
       }
+      for(const risk of result.risks){const r=planned.find(r=>r.old.id===risk.unit_id);db.prepare('INSERT INTO schedule_alerts(id,project_id,carrier_id,unit_id,vin,load_id,load_reference,field,before_value,after_value,delta_minutes,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)').run(randomUUID(),p,c.id,risk.unit_id,risk.vin,r.loadGroup?.loadId||(r.release?null:r.old.load_id),risk.load_reference,risk.field,risk.before,risk.after,risk.deltaMinutes,t);}
       const affectedLoads=new Set();
       for(let i=0;i<planned.length;i++){
         const r=planned[i];

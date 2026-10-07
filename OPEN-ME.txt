@@ -1,4 +1,4 @@
-RYAN TMS v0.4.0 - Open the dashboard on your Windows computer
+RYAN TMS v0.5.0 - Open the dashboard on your Windows computer
 
 1. Install Node.js version 24 from https://nodejs.org if you do not have it.
 2. Extract the entire ZIP file to a folder on your computer.
@@ -8,6 +8,11 @@ RYAN TMS v0.4.0 - Open the dashboard on your Windows computer
 6. Keep the command window open while using the app.
 
 The dashboard includes:
+- Calendar: planned pickups, deliveries, month navigation and carrier filter.
+- Pricing & analysis: project cost/revenue per load or unit, with bulk rates.
+- Ready to go: Reference / Appointment # added; actual stages take precedence.
+- Schedule changes: saved date-change warnings with load and VIN details.
+- All project loads: dashboard totals across every carrier.
 - Import units: paste VINs or rows copied from Google Sheets.
 - Packing lists: organise your imported vehicle manifests.
 - Load builds: choose a carrier and paste its complete sheet batch.
@@ -28,7 +33,20 @@ Extract this ZIP into the SAME parent folder so the Ryan-TMS folder merges
 with your existing Ryan-TMS folder. Replace application files when asked.
 DO NOT delete the old folder or its data directory first.
 This ZIP contains no data folder and does not replace your existing database.
-Start START-TMS.cmd again, refresh Edge, and check v0.4.0 in the footer.
+Start START-TMS.cmd again, refresh Edge, and check v0.5.0 in the footer.
+
+TO USE PROJECT LOAD PRICING
+Open Pricing & analysis. Choose Cost basis = Per load.
+Enter Load cost default (EUR). Choose Fill blank prices or Replace prices.
+Choose Revenue basis = Per unit or Per load and enter the matching default.
+Click Save project rates. Blank default amounts do not change existing prices.
+Only the selected bases count toward totals; missing prices are flagged.
+To price selected loads differently, use the table and bulk pricing controls.
+
+TO FOLLOW UP CHANGED DATES
+Review the highlighted schedule warnings before applying a carrier paste.
+After applying, open Schedule changes to see old/new ETD/ETA and affected VINs.
+Mark followed up after checking with the carrier. History remains available.
 
 TO ASSIGN YOUR FIRST 200 VINS
 Open Unit register. Enter 200 under Select next, then Select 200 VINs.

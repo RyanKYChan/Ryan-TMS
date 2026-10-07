@@ -75,3 +75,10 @@ test('Address inference preserves explicit cities, and does not guess a country 
   assert.deepEqual(inferAddressDetails('Unknown compound','pod'),{});
   const grid=inspectGrid(`VIN\tLoading\tPOL-CITY\n${vin}\tPort road, 9130 Kallo\tAntwerp`);assert.equal(previewRows(grid.rows,grid.mapping)[0].unit.origin,'Antwerp');
 });
+
+test('Unit revenue is mapped and normalised separately from existing unit cost',()=>{
+  const grid=inspectGrid(`VIN\tPrice(EUR)\tUnit revenue (EUR)\n${vin}\t95,50\tEUR 125,75`);
+  assert.deepEqual(grid.mapping,['vin','price','revenue']);
+  const [row]=previewRows(grid.rows,grid.mapping);assert.deepEqual(row.errors,[]);assert.equal(row.unit.price,'95.50');assert.equal(row.unit.revenue,'125.75');
+  const bad=inspectGrid(`VIN\tUnit revenue (EUR)\n${vin}\t-20`);assert.ok(previewRows(bad.rows,bad.mapping)[0].errors.length);
+});

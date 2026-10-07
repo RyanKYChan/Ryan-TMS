@@ -4,7 +4,7 @@ A mini TMS for vehicle spot transport and shunting, starting with a Maxus projec
 
 ## Open it on your Windows computer
 
-[Download the v0.4.0 Windows ZIP](https://github.com/RyanKYChan/Ryan-TMS/raw/refs/heads/main/downloads/ryan-tms-windows-v0.4.0.zip)
+[Download the v0.5.0 Windows ZIP](https://github.com/RyanKYChan/Ryan-TMS/raw/refs/heads/main/downloads/ryan-tms-windows-v0.5.0.zip)
 
 ChatGPT's cloud environment page does not expose the web app. The server must run on your own computer, or the app needs a separate hosted deployment. Opening the HTML files directly does not start the API.
 
@@ -14,7 +14,7 @@ The launcher can also be run using `npm run open` after dependencies and the pro
 
 ## Update an existing Windows installation
 
-Close the app's command window first. Make a backup copy of your existing `data` folder. Extract the new ZIP into the same parent folder so its `Ryan-TMS` folder merges with your current `Ryan-TMS` folder; replace application files when prompted. **Do not delete the old folder or its `data` directory.** The ZIP contains no database or `data` folder, so merging it does not replace your existing packing lists. Start `START-TMS.cmd` again and refresh Edge. Version 0.4.0 appears in the footer. Existing packing lists, notes, dates, and load assignments are retained; the database gains carrier workspaces and saved packing-list order automatically.
+Close the app's command window first. Make a backup copy of your existing `data` folder. Extract the new ZIP into the same parent folder so its `Ryan-TMS` folder merges with your current `Ryan-TMS` folder; replace application files when prompted. **Do not delete the old folder or its `data` directory.** The ZIP contains no database or `data` folder, so merging it does not replace your existing packing lists. Start `START-TMS.cmd` again and refresh Edge. Version 0.5.0 appears in the footer. Existing packing lists, notes, dates, and load assignments are retained; the database gains load pricing, unit revenue, project rates, and saved schedule alerts automatically. Existing unit prices remain unit costs.
 
 You can re-paste an existing packing list with its original name to fill previously missed columns. Matching VINs update in place rather than creating duplicates.
 
@@ -89,6 +89,17 @@ For a sheet with twelve dated/trucked groups of six VINs followed by 128 unplann
 
 Google Sheets checks remain manual copy/paste. The [carrier sheet template](templates/carrier-sheet.tsv) supplies a reusable header row.
 
+## Calendar, pricing and schedule changes (v0.5.0)
+
+- **Calendar** displays planned pickups (ETD). Choose deliveries (ETA) or both, filter by carrier, and move between months. Click a movement to open the load or VIN. VINs sharing a load and timestamp are grouped; differing dates within a load remain visible separately. Days and times use your browser's timezone.
+- **Pricing & analysis** lets each project choose cost per load/unit and revenue per load/unit independently. Existing **Price (EUR)** remains the unit cost. Add unit revenue in VIN details, bulk edit or a pasted **Unit revenue (EUR)** column. Load details contain separate cost and revenue fields.
+- Set project default rates and choose **Fill blank prices only**, **Replace existing prices**, or **Defaults for future imports / loads only**. Only the selected cost/revenue bases contribute to analysis, preventing double counting. New VINs/loads inherit their respective defaults. Select particular loads in the pricing table to apply a different bulk rate.
+- Revenue minus cost is **planned margin**, based on recorded amounts. Missing price entries are flagged; future load prices for VINs without a load are excluded. Zero is a recorded price, distinct from a blank. Amounts are EUR with up to two decimals.
+- **Ready to go** is the additional unit stage when **Reference / Appointment #** is present, or the sheet explicitly says Ready. Actual departure/delivery stages take precedence. Truck plate, ETD or load membership establishes Scheduled; generated load references do not establish readiness. A load is ready when every VIN is ready.
+- Carrier paste previews prominently show changed existing ETD/ETA dates, old and new values, earlier/later movement, affected loads and VINs. New dates added to blank cells are normal planning updates. Equal timestamps in different timezone formats do not create risks. Blank cells preserve saved dates.
+- After applying a paste, **Schedule changes** and the dashboard retain alerts until you **Mark followed up**. Expand each alert's VIN list to open individual records; the load reference opens the load. Followed-up alerts remain available in history.
+- **All project loads** on the dashboard, carrier workspace and load workspace shows totals across all carriers, scheduled loads including ready loads, readiness and actual progress. Empty inferred groups retained after repartitioning are excluded; manual draft loads remain in the total and are counted as awaiting planning.
+
 ## Sheet columns
 
 The header-only [packing list template](templates/packing-list.tsv) can be pasted into Google Sheets. These columns are recognised automatically:
@@ -103,7 +114,8 @@ The header-only [packing list template](templates/packing-list.tsv) can be paste
 | Dealer name | Dealer |
 | ETD, ATD, ETA, ATA | Estimated and actual departure/arrival |
 | Carrier, Truck plate | Carrier and truck registration |
-| Price(EUR) | Unit transport price in EUR |
+| Price(EUR) | Unit transport cost in EUR |
+| Unit revenue (EUR) | Revenue per unit in EUR |
 | T1 | Yes, No, or not specified |
 
 If your sheet has a single header `carrier Truck plate`, it maps to Carrier and preserves the entire cell. For separate values, use separate Carrier and Truck plate columns, or remap the column to Truck plate in the preview.
@@ -117,7 +129,7 @@ Dates accept `YYYY-MM-DD`, `DD/MM/YYYY` (default), or `MM/DD/YYYY` when selected
 - A VIN is unique **within a project**. The same vehicle can appear in another project for a later transport or shunting operation.
 - Re-importing an existing VIN updates supplied values. Blank cells preserve existing values, including actual milestones and load assignment. Importing it into a different named list moves it to that list; each unit has one current packing list.
 - Imports are atomic. Invalid rows prevent the entire batch from being written. The expected project count is a planning target, not a hard limit.
-- Operational status is inferred: ATA means **Delivered**, ATD means **In transit**, a load or ETD means **Scheduled**. Recognised sheet statuses (Delivered/Completed, In transit/Departed/Loaded, Scheduled/Planned) are used when actual dates are absent. Unknown sheet statuses are retained for reference. Delivered vehicles without ATA remain visible and are counted as missing actual arrival.
+- Operational status is inferred: ATA means **Delivered**, ATD means **In transit**, Reference / Appointment # means **Ready to go**, otherwise truck plate, a load or ETD means **Scheduled**. Recognised sheet statuses (Delivered/Completed, In transit/Departed/Loaded, Scheduled/Planned, Ready/Ready to go) are used when actual dates are absent. Unknown sheet statuses are retained for reference. Delivered vehicles without ATA remain visible and are counted as missing actual arrival.
 - A unit can be assigned to one current load. Capacity, project ownership, duplicate selections, and already departed/delivered units are checked by the API.
 - Assignment copies the load route, planned dates, carrier, and truck to the unit. Updating a load synchronises those fields to all its assigned units. Address details, comments, prices, T1, and actual dates stay with the unit.
 - The manual **Remove from load** action clears ETD and ETA. A full-sheet update returning planned units to the pool keeps their saved dates. Departed/delivered loads are protected in both flows.

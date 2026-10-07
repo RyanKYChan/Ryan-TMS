@@ -3,7 +3,7 @@ export const columns = [
   ['vin','VIN'],['brand','Brand'],['model','Model'],['reference','Reference'],['source_status','Sheet status'],
   ['notes','Comments / port comment'],['pol_country','POL country'],['origin','POL city'],['pol_zipcode','POL postcode'],['pol_address','POL address'],
   ['pod_country','POD country'],['destination','POD city'],['pod_zipcode','POD postcode'],['pod_address','POD address'],
-  ['dealer','Dealer name'],['etd','ETD'],['atd','ATD'],['eta','ETA'],['ata','ATA'],['carrier','Carrier'],['truck','Truck plate'],['price','Price (EUR)'],['t1','T1'],
+  ['dealer','Dealer name'],['etd','ETD'],['atd','ATD'],['eta','ETA'],['ata','ATA'],['carrier','Carrier'],['truck','Truck plate'],['price','Price (EUR)'],['t1','T1'],['revenue','Unit revenue (EUR)'],
 ];
 export const normalizeHeader = s=>s.normalize('NFKD').toLowerCase().replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]/g,'');
 const aliases={
@@ -13,7 +13,7 @@ const aliases={
   podcountry:'pod_country',podcity:'destination',podcty:'destination',destination:'destination',podzipcode:'pod_zipcode',podpostcode:'pod_zipcode',podaddress:'pod_address',
   dealername:'dealer',dealer:'dealer',etd:'etd',eta:'eta',atd:'atd',ata:'ata',carrier:'carrier',carriertruckplate:'carrier',truckplate:'truck',truck:'truck',priceeur:'price',price:'price',t1:'t1',t1yesno:'t1'
 };
-Object.assign(aliases,{
+Object.assign(aliases,{revenue:'revenue',revenueeur:'revenue',unitrevenue:'revenue',unitrevenueeur:'revenue',unitcost:'price',unitcosteur:'price',
   vinnumber:'vin',vinno:'vin',vinnr:'vin',vin17:'vin',vehiclevin:'vin',chassisno:'vin',chassisnr:'vin',chassisid:'vin',chassisvin:'vin',vehiclenumber:'vin',
   vehiclebrand:'brand',vehiclemake:'brand',vehiclemodel:'model',modelname:'model',modeldescription:'model',bookingreference:'reference',customerreference:'reference',referencenumber:'reference',appointment:'reference',appointmentnumber:'reference',appointmentno:'reference',
   vehiclestatus:'source_status',transportstatus:'source_status',shipmentstatus:'source_status',remarks:'notes',remark:'notes',portremarks:'notes',portnotes:'notes',commentsportcomment:'notes',
@@ -153,7 +153,7 @@ export function previewRows(grid,mapping,existing=[],order='dmy',defaults={}) {
       try{
         let value=s;
         if(['etd','eta','atd','ata'].includes(field))value=parseDate(s,order);
-        if(field==='price')value=parsePrice(s);
+        if(['price','revenue'].includes(field))value=parsePrice(s);
         if(field==='t1'){
           const t=s.toLowerCase();if(['yes','y','true','1'].includes(t))value='yes';else if(['no','n','false','0'].includes(t))value='no';else throw new Error('T1 must be yes or no.');
         }

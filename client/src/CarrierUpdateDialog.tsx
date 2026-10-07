@@ -1,3 +1,4 @@
+import { ScheduleRiskPreview } from './Operations';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowRight, ClipboardPaste, Check } from 'lucide-react';
 import { inspectCarrierGrid, previewCarrierRows } from './carrier-importer.js';
@@ -6,7 +7,7 @@ import { api, Badge, Field, Modal, formatDate, timezone } from './shared';
 import type { Carrier, Stage, Unit } from './types';
 
 type Change={field:string;before:string;after:string};
-type Review={snapshot:string;rows:{vin:string;unit:Unit;notice:string;classification:'load'|'pool';changes:Change[];beforeStatus:Stage;afterStatus:Stage;loadBefore:string;loadAfter:string}[];groups:{reference:string;new:boolean;unitCount:number;vins:string[]}[];counts:{matched:number;changed:number;unchanged:number;loadsCreated:number;loadMoves:number;loadsReleased:number;built:number;pool:number}};
+type Review={risks:{field:string;before:string;after:string;vin:string;unit_id:string;load_reference:string;carrier:string;deltaMinutes:number}[];snapshot:string;rows:{vin:string;unit:Unit;notice:string;classification:'load'|'pool';changes:Change[];beforeStatus:Stage;afterStatus:Stage;loadBefore:string;loadAfter:string}[];groups:{reference:string;new:boolean;unitCount:number;vins:string[]}[];counts:{matched:number;changed:number;unchanged:number;loadsCreated:number;loadMoves:number;loadsReleased:number;built:number;pool:number}};
 const label=(f:string)=>f==='load'?'Load':columns.find(([field])=>field===f)?.[1]||f;
 const display=(f:string,v:string)=>v?['etd','eta','atd','ata'].includes(f)?formatDate(v,true):v:'blank';
 
@@ -54,7 +55,7 @@ export default function CarrierUpdateDialog({projectId,carrier,units,onClose,onD
         {(inspected.error||invalid.length>0)&&<div className="error" role="alert">{inspected.error||`Fix ${invalid.length} row(s) before continuing. ${invalid.slice(0,3).map(r=>`${r.unit.vin}: ${r.errors.join(' ')}`).join(' ')}`}</div>}
       </>:<>
         <div className="review-summary"><div><b>{review.counts.matched}</b><span>Matched VINs</span></div><div><b>{review.counts.changed}</b><span>Changed VINs</span></div><div><b>{review.counts.unchanged}</b><span>Unchanged</span></div><div><b>{review.counts.loadsCreated}</b><span>New load builds</span></div><div><b>{review.counts.built}</b><span>VINs on loads</span></div><div><b>{review.counts.pool}</b><span>Not load built</span></div></div>
-        {review.groups.length>0&&<div className="proposed-loads"><h3>Load groups to apply</h3>{review.groups.map(g=><div className="proposed-load" key={g.reference}><strong>{g.reference}</strong><span>{g.unitCount} VINs · {g.new?'Create load':'Use existing load'}</span></div>)}</div>}
+        <ScheduleRiskPreview risks={review.risks}/>{review.groups.length>0&&<div className="proposed-loads"><h3>Load groups to apply</h3>{review.groups.map(g=><div className="proposed-load" key={g.reference}><strong>{g.reference}</strong><span>{g.unitCount} VINs · {g.new?'Create load':'Use existing load'}</span></div>)}</div>}
         {review.counts.loadMoves>0&&<p className="import-warning">{review.counts.loadMoves} planned vehicle(s) will move from an existing load to the proposed group. Old load records remain in the load register.</p>}
         {review.counts.loadsReleased>0&&<p className="import-warning">{review.counts.loadsReleased} planned VIN(s) are now in the unassigned remainder and will be removed from their load. Their saved dates are kept. Departed and delivered load assignments are retained.</p>}
         <label className="remember-mapping"><input type="checkbox" checked={changesOnly} onChange={e=>setChangesOnly(e.target.checked)}/>Show changed VINs only</label>

@@ -2,7 +2,7 @@ import { Children, cloneElement, isValidElement, useEffect, useId, useRef } from
 import type { ReactNode } from 'react';
 import { X, ArrowUpRight } from 'lucide-react';
 import type { Stage } from './types';
-export const stageLabels:Record<Stage,string>={unscheduled:'Unscheduled',scheduled:'Scheduled',in_transit:'In transit',delivered:'Delivered'};
+export const stageLabels:Record<Stage,string>={unscheduled:'Unscheduled',scheduled:'Scheduled',ready:'Ready to go',in_transit:'In transit',delivered:'Delivered'};
 export const timezone=Intl.DateTimeFormat().resolvedOptions().timeZone;
 export function formatDate(s:string,withTime=false){return s?new Date(s).toLocaleString('en-GB',{day:'2-digit',month:'short',...(withTime?{hour:'2-digit',minute:'2-digit'}:{})}):'—';}
 export function toInput(s:string){if(!s)return '';const d=new Date(s);return new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,16);}

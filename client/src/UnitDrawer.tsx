@@ -19,6 +19,7 @@ export default function UnitDrawer({unit,projectId,events,onClose,onDone}:{unit:
       <div className="drawer-status"><Badge stage={unit.status}/><span className="muted small">{unit.load_ref?<><Truck size={14}/>{unit.load_ref}</>:'Awaiting load assignment'}</span></div>
       <h3 className="form-section-title">Vehicle details</h3><div className="form-grid">{fields(general)}
         <Field label="Price (EUR)"><input type="number" min="0" step="0.01" max="10000000" value={form.price||''} onChange={e=>set('price',e.target.value)}/></Field>
+        <Field label="Unit revenue (EUR)"><input type="number" min="0" step="0.01" max="10000000" value={form.revenue||''} onChange={e=>set('revenue',e.target.value)}/></Field>
         <Field label="T1 customs document"><select value={form.t1||''} onChange={e=>set('t1',e.target.value)}><option value="">Not specified</option><option value="yes">Yes</option><option value="no">No</option></select></Field>
       </div>
       <h3 className="form-section-title"><MapPin size={15}/>Port of loading (POL)</h3><div className="form-grid">{fields(pol)}</div>

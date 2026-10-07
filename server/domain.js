@@ -1,11 +1,12 @@
-export const FIELDS = ['vin','brand','model','reference','source_status','notes','pol_country','origin','pol_zipcode','pol_address','pod_country','destination','pod_zipcode','pod_address','dealer','etd','eta','atd','ata','carrier','truck','price','t1'];
+export const FIELDS = ['vin','brand','model','reference','source_status','notes','pol_country','origin','pol_zipcode','pol_address','pod_country','destination','pod_zipcode','pod_address','dealer','etd','eta','atd','ata','carrier','truck','price','t1','revenue'];
 export function status(unit) {
   if (unit.ata) return 'delivered';
   if (unit.atd) return 'in_transit';
   const s=String(unit.source_status||'').toLowerCase().replaceAll('_',' ').trim();
   if(['delivered','completed'].includes(s))return 'delivered';
   if(['in transit','departed','loaded'].includes(s))return 'in_transit';
-  if (unit.load_id || unit.etd || ['scheduled','planned'].includes(s)) return 'scheduled';
+  if (String(unit.reference||'').trim() || ['ready','ready to go'].includes(s)) return 'ready';
+  if (unit.truck || unit.load_id || unit.etd || ['scheduled','planned'].includes(s)) return 'scheduled';
   return 'unscheduled';
 }
 export function cleanVin(v) { return String(v ?? '').trim().toUpperCase(); }
@@ -25,7 +26,7 @@ export function validateUnit(unit) {
   }
   if (unit.etd && unit.eta && Date.parse(unit.eta) < Date.parse(unit.etd)) return 'ETA must be on or after ETD.';
   if (unit.atd && unit.ata && Date.parse(unit.ata) < Date.parse(unit.atd)) return 'ATA must be on or after ATD.';
-  if(unit.price && (!/^\d+(\.\d{1,2})?$/.test(unit.price) || Number(unit.price)>10000000)) return 'Price must be a positive EUR amount with at most two decimals.';
+  for(const f of ['price','cost','revenue'])if(unit[f] && (!/^\d+(\.\d{1,2})?$/.test(unit[f]) || Number(unit[f])>10000000)) return `${f==='price'?'Price':f==='cost'?'Cost':'Revenue'} must be a nonnegative EUR amount with at most two decimals.`;
   if(unit.t1 && !['yes','no'].includes(unit.t1))return 'T1 must be yes, no, or blank.';
   return null;
 }
@@ -53,8 +54,8 @@ export function planBulkEdit(units,changes){
   });
 }
 export function exportCsv(rows) {
-  const headers=['Brand','VIN','Model','Reference','Status','Comments','POL-COUNTRY','POL-CTY','POL-ZIPCODE','POL-ADDRESS','POD-COUNTRY','POD-CITY','POD-ZIPCODE','POD-ADDRESS','Dealer name','ETD','ATD','ETA','ATA','Carrier','Truck plate','Price(EUR)','T1','Packing list','Load','Sheet status'];
-  const fields=['brand','vin','model','reference','status','notes','pol_country','origin','pol_zipcode','pol_address','pod_country','destination','pod_zipcode','pod_address','dealer','etd','atd','eta','ata','carrier','truck','price','t1','packing_list','load_ref','source_status'];
+  const headers=['Brand','VIN','Model','Reference','Status','Comments','POL-COUNTRY','POL-CTY','POL-ZIPCODE','POL-ADDRESS','POD-COUNTRY','POD-CITY','POD-ZIPCODE','POD-ADDRESS','Dealer name','ETD','ATD','ETA','ATA','Carrier','Truck plate','Price(EUR)','T1','Packing list','Load','Sheet status','Unit revenue(EUR)'];
+  const fields=['brand','vin','model','reference','status','notes','pol_country','origin','pol_zipcode','pol_address','pod_country','destination','pod_zipcode','pod_address','dealer','etd','atd','eta','ata','carrier','truck','price','t1','packing_list','load_ref','source_status','revenue'];
   const escape = (v) => {
     let s = String(v ?? '');
     if (/^[\s]*[=+@-]/.test(s)) s = "'" + s;

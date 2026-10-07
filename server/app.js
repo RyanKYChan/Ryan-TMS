@@ -1,3 +1,4 @@
+import { registerFinanceRoutes } from './finance.js';
 import express from 'express';
 import { randomUUID } from 'node:crypto';
 import { FIELDS, cleanVin, validateVin, validateUnit, status, exportCsv, planBulkEdit } from './domain.js';
@@ -24,8 +25,8 @@ export function createApp(db) {
   app.post('/api/projects', (req,res) => {
     const name = text(req.body.name,100); if (!name) fail('Project name is required.');
     const p = {id:randomUUID(),name,customer:text(req.body.customer ?? '',100),target:count(req.body.target ?? 400,1,100000),created_at:now()};
-    db.prepare('INSERT INTO projects VALUES(?,?,?,?,?)').run(p.id,p.name,p.customer,p.target,p.created_at);
-    res.status(201).json(p);
+    db.prepare('INSERT INTO projects(id,name,customer,target,created_at) VALUES(?,?,?,?,?)').run(p.id,p.name,p.customer,p.target,p.created_at);
+    res.status(201).json(project(p.id));
   });
   app.get('/api/projects/:p/workspace', (req,res) => {
     const p=project(req.params.p);
@@ -33,6 +34,7 @@ export function createApp(db) {
       packingLists:db.prepare('SELECT * FROM packing_lists WHERE project_id=? ORDER BY created_at DESC').all(p.id),
       carriers:db.prepare(`SELECT c.*, (SELECT max(created_at) FROM carrier_updates WHERE carrier_id=c.id) AS last_update FROM carriers c WHERE project_id=? ORDER BY name`).all(p.id),
       carrierUpdates:db.prepare('SELECT * FROM carrier_updates WHERE project_id=? ORDER BY created_at DESC LIMIT 100').all(p.id),
+      scheduleAlerts:db.prepare('SELECT a.*, c.name AS carrier FROM schedule_alerts a JOIN carriers c ON c.id=a.carrier_id WHERE a.project_id=? ORDER BY a.created_at DESC,a.rowid DESC').all(p.id),
       events:db.prepare('SELECT * FROM events WHERE project_id=? ORDER BY created_at DESC LIMIT 50').all(p.id)});
   });
   app.get('/api/projects/:p/export', (req,res) => {
@@ -68,6 +70,7 @@ export function createApp(db) {
           event(p,old.id,`Updated from packing list ${name}`); updated++;
         } else {
           const id=randomUUID(), t=now();
+          const rates=project(p);u.price??=rates.unit_cost;u.revenue??=rates.unit_revenue;
           db.prepare(`INSERT INTO units(id,project_id,${FIELDS.join(',')},packing_list_id,created_at,updated_at,import_order) VALUES(${Array(FIELDS.length+6).fill('?').join(',')})`)
             .run(id,p,...FIELDS.map(f=>u[f]??''),list.id,t,t,++nextOrder);
           event(p,id,`Imported ${u.vin} from ${name}`); added++;
@@ -106,15 +109,15 @@ export function createApp(db) {
     res.json(unitById(p,old.id));
   });
   const validateLoad = body => {
-    const l={}; for(const f of ['reference','carrier','truck','driver','origin','destination','etd','eta','notes']) l[f]=text(body[f] ?? '',f==='notes'?2000:100);
+    const l={}; for(const f of ['reference','carrier','truck','driver','origin','destination','etd','eta','notes','cost','revenue']) l[f]=text(body[f] ?? '',f==='notes'?2000:100);
     if(!l.reference)fail('Load reference is required.');
     l.capacity=count(body.capacity ?? 8,1,500); const e=validateUnit(l);if(e)fail(e);return l;
   };
   app.post('/api/projects/:p/loads', (req,res) => {
-    const p=project(req.params.p).id,l=validateLoad(req.body),id=randomUUID();
+    const p=project(req.params.p).id,l=validateLoad({cost:project(p).load_cost,revenue:project(p).load_revenue,...req.body}),id=randomUUID();
     transaction(db,()=>{
       if(l.carrier)l.carrier=ensureCarrier(db,p,l.carrier).name;
-      db.prepare('INSERT INTO loads VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)').run(id,p,l.reference,l.carrier,l.truck,l.driver,l.capacity,l.origin,l.destination,l.etd,l.eta,l.notes,now());
+      db.prepare('INSERT INTO loads(id,project_id,reference,carrier,truck,driver,capacity,origin,destination,etd,eta,notes,created_at,cost,revenue) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)').run(id,p,l.reference,l.carrier,l.truck,l.driver,l.capacity,l.origin,l.destination,l.etd,l.eta,l.notes,now(),l.cost,l.revenue);
       event(p,null,`Created load ${l.reference}`);
     });res.status(201).json(loadById(p,id));
   });
@@ -160,6 +163,7 @@ export function createApp(db) {
     transaction(db,()=>{for(const u of pending){db.prepare(`UPDATE units SET ${field}=?,updated_at=? WHERE id=?`).run(value,now(),u.id);event(p,u.id,`${field==='atd'?'Departed':'Delivered'} on load ${l.reference}`);}});
     res.json({updated:pending.length});
   });
+  registerFinanceRoutes(app,db,{project,units,event,fail,text,now});
   registerCarrierRoutes(app,db,{project,units,unitById,event,fail,text,now});
   app.use('/api',(_req,res)=>res.status(404).json({error:'API endpoint not found.'}));
   app.use((e,_req,res,_next)=>{

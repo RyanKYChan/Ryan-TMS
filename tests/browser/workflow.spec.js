@@ -23,7 +23,7 @@ test('Paste sheet → build load → assign → depart → deliver → reload �
   await page.getByRole('button',{name:/^Unit register/}).click();await page.getByRole('checkbox',{name:'Select this page'}).check();
   await page.getByRole('button',{name:'Assign to load',exact:true}).click();await page.getByLabel('Load *',{exact:true}).selectOption({label:'MX-001 · 8 spaces'});
   await page.getByRole('button',{name:'Assign vehicles'}).click();await expect(page.getByRole('dialog')).toHaveCount(0);
-  await expect(page.locator('tbody .badge.scheduled')).toHaveCount(2);
+  await expect(page.locator('tbody .badge.ready')).toHaveCount(2);
   await page.getByRole('button',{name:'MX-001',exact:true}).first().click();
   await page.getByLabel('Actual date and time',{exact:true}).fill('2026-10-12T09:00');await page.getByRole('button',{name:'Record',exact:true}).click();
   await expect(page.getByRole('dialog').locator('tbody .badge.in_transit')).toHaveCount(2);
@@ -163,4 +163,46 @@ test('Load builds chooses a carrier and repeatedly reads a full 200-VIN sheet wi
   await page.getByRole('button',{name:'Paste full batch for Valida'}).click();await page.getByLabel('Paste carrier sheet').fill(sheet(78,true));await page.getByRole('button',{name:'Review changes'}).click();await expect(page.getByRole('dialog').locator('.review-summary')).toContainText('1New load builds');await expect(page.getByRole('dialog').locator('.review-summary')).toContainText('122Not load built');await page.getByRole('button',{name:'Apply update · 12 changed',exact:true}).click();await expect(page.getByRole('dialog')).toHaveCount(0);
   const w=await (await page.request.get(`/api/projects/${p}/workspace`)).json();expect(w.units).toHaveLength(200);expect(w.loads).toHaveLength(13);expect(w.units.filter(u=>!u.load_id)).toHaveLength(122);expect(w.units.filter(u=>u.status==='delivered')).toHaveLength(6);expect(w.units.every(u=>u.notes==='Keep original note'&&u.packing_list==='Full source batch')).toBe(true);
   await page.setViewportSize({width:390,height:844});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
+});
+
+test('Project load pricing, unit revenue and ready load totals are usable from the dashboard',async({page,request})=>{
+  const p=await page.getByLabel('Active project').inputValue(),base=`/api/projects/${p}`;
+  await request.post(base+'/import',{data:{packingList:'Finance batch',rows:[1,2].map(i=>({vin:`LSFAM11A1RA${String(i).padStart(6,'0')}`,reference:'Booking test',price:'90'}))}});
+  let w=await (await request.get(base+'/workspace')).json();const l=await (await request.post(base+'/loads',{data:{reference:'FIN-001',carrier:'Finance carrier'}})).json();
+  await request.post(base+`/loads/${l.id}/assign`,{data:{unitIds:w.units.map(u=>u.id)}});await page.reload();
+  await expect(page.locator('.load-summary')).toContainText('Scheduled loads');await expect(page.locator('.load-summary .load-metrics>div').nth(1)).toContainText('1');await expect(page.locator('.load-summary .load-metrics>div').nth(2)).toContainText('1');
+  await page.getByRole('button',{name:'Pricing & analysis'}).click();await page.getByLabel('Cost basis',{exact:true}).selectOption('load');
+  await page.getByLabel('Load cost default (EUR)',{exact:true}).fill('500');await page.getByLabel('Unit revenue default (EUR)',{exact:true}).fill('300');
+  await page.getByRole('button',{name:'Save project rates'}).click();await expect(page.locator('.finance-summary')).toContainText('€500.00');await expect(page.locator('.finance-summary')).toContainText('€600.00');await expect(page.locator('.finance-summary')).toContainText('€100.00');
+  await page.getByRole('checkbox',{name:'Select price FIN-001'}).check();await page.getByLabel('Bulk load cost (EUR)').fill('550');await page.getByLabel('Bulk load price action').selectOption('replace');await page.getByRole('button',{name:'Apply to 1 loads'}).click();await expect(page.locator('.finance-summary')).toContainText('€50.00');
+  await page.getByRole('button',{name:'FIN-001',exact:true}).click();await expect(page.getByLabel('Load cost (EUR)',{exact:true})).toHaveValue('550');await page.getByLabel('Load revenue (EUR)',{exact:true}).fill('700');await page.getByRole('button',{name:'Save load changes'}).click();
+  w=await (await request.get(base+'/workspace')).json();expect(w.units.map(u=>u.price)).toEqual(['90','90']);expect(w.units.map(u=>u.revenue)).toEqual(['300','300']);expect(w.loads[0].revenue).toBe('700');
+  await page.screenshot({path:'.local/screenshots/pricing.png',fullPage:true});
+});
+
+test('Calendar groups load VINs by local date, supports delivery dates and carrier filtering, and opens details',async({page,request})=>{
+  const p=await page.getByLabel('Active project').inputValue(),base=`/api/projects/${p}`;
+  await request.post(base+'/import',{data:{packingList:'Calendar batch',rows:[1,2,3].map(i=>({vin:`LSFAM11A1RA${String(i).padStart(6,'0')}`}))}});
+  const w=await (await request.get(base+'/workspace')).json();const l=await (await request.post(base+'/loads',{data:{reference:'CAL-001',carrier:'Calendar carrier',etd:'2026-10-11T23:30:00Z',eta:'2026-10-13T08:00:00Z'}})).json();
+  await request.post(base+`/loads/${l.id}/assign`,{data:{unitIds:w.units.slice(0,2).map(u=>u.id)}});await request.patch(base+`/units/${w.units[2].id}`,{data:{carrier:'Other calendar carrier',etd:'2026-10-12T09:00:00Z'}});await page.reload();
+  await page.getByRole('button',{name:'Calendar',exact:true}).click();await page.getByLabel('Calendar month').fill('2026-10');
+  const day=page.locator('[data-date="2026-10-12"]');await expect(day.locator('.calendar-event')).toHaveCount(2);await expect(day).toContainText('Pickup 01:30');await expect(day).toContainText('2 VINs');
+  await page.getByLabel('Calendar dates').selectOption('delivery');await expect(page.locator('[data-date="2026-10-13"]')).toContainText('Delivery 10:00');await expect(page.locator('.calendar-event')).toHaveCount(1);
+  await page.getByLabel('Calendar dates').selectOption('both');await page.getByLabel('Calendar carrier').selectOption('Calendar carrier');await expect(page.locator('.calendar-event')).toHaveCount(2);
+  await page.getByRole('button',{name:'Next month'}).click();await expect(page.getByRole('heading',{name:'November 2026'})).toBeVisible();await page.getByRole('button',{name:'Previous month'}).click();
+  await page.screenshot({path:'.local/screenshots/calendar.png',fullPage:true});await day.getByRole('button',{name:/CAL-001/}).click();await expect(page.getByRole('dialog')).toContainText('CAL-001');
+});
+
+test('A carrier paste prominently warns about changed dates and saves follow-up alerts with affected VINs',async({page,request})=>{
+  const p=await page.getByLabel('Active project').inputValue(),base=`/api/projects/${p}`;
+  await request.post(base+'/import',{data:{packingList:'Risk batch',rows:[1,2].map(i=>({vin:`LSFAM11A1RA${String(i).padStart(6,'0')}`}))}});
+  let w=await (await request.get(base+'/workspace')).json();const l=await (await request.post(base+'/loads',{data:{reference:'RISK-001',carrier:'Risk carrier',etd:'2026-10-12T08:00:00Z',eta:'2026-10-13T08:00:00Z'}})).json();
+  await request.post(base+`/loads/${l.id}/assign`,{data:{unitIds:w.units.map(u=>u.id)}});await page.reload();await page.getByRole('button',{name:/^Load builds/}).click();await page.getByRole('button',{name:'Paste full batch for Risk carrier'}).click();
+  await page.getByLabel('Paste carrier sheet').fill('VIN\tLoad\tAppointment #\tETD\tETA\nLSFAM11A1RA000001\tRISK-001\tBOOKING-1\t14/10/2026 10:00\t15/10/2026 10:00\nLSFAM11A1RA000002\tRISK-001\tBOOKING-2\t14/10/2026 10:00\t15/10/2026 10:00');
+  await page.getByRole('button',{name:'Review changes'}).click();await expect(page.locator('.schedule-warning')).toContainText('2 affected VINs');await expect(page.locator('.schedule-warning')).toContainText('RISK-001');await expect(page.locator('.schedule-warning')).toContainText('Pickup later');await expect(page.locator('.schedule-warning')).toContainText('Delivery later');
+  await page.locator('.schedule-warning details').first().locator('summary').click();await expect(page.locator('.schedule-warning')).toContainText('LSFAM11A1RA000001');await page.screenshot({path:'.local/screenshots/schedule-warning.png',fullPage:true});
+  await page.getByRole('button',{name:'Apply update · 2 changed'}).click();await expect(page.getByRole('dialog')).toHaveCount(0);await page.getByRole('button',{name:'Overview',exact:true}).click();await expect(page.locator('.saved-alerts')).toContainText('RISK-001');
+  await page.getByRole('button',{name:'Schedule changes',exact:true}).click();await page.locator('.saved-alerts details').first().locator('summary').click();await expect(page.locator('.saved-alerts .risk-vins').first()).toContainText('LSFAM11A1RA000001');
+  await page.getByRole('button',{name:'Mark followed up'}).first().click();await expect(page.getByRole('button',{name:'Mark followed up'})).toHaveCount(1);await page.getByRole('button',{name:'Mark followed up'}).click();await expect(page.getByText('No outstanding schedule changes.')).toBeVisible();
+  await page.getByLabel('Show followed-up changes').check();await expect(page.locator('.saved-alerts')).toContainText('Followed up');w=await (await request.get(base+'/workspace')).json();expect(w.units.every(u=>u.status==='ready')).toBe(true);expect(w.scheduleAlerts.every(a=>a.resolved_at)).toBe(true);
 });
