@@ -37,7 +37,7 @@ Install Node.js 24 from https://nodejs.org/en/download, extract the archive, and
 
 **Updating:** Close the old app first. Back up its `data` folder. Extract into the same parent folder so the new `Ryan-TMS` folder merges with the existing folder, replacing application files. Do not delete the old folder or its `data` directory. The ZIP contains no databases. Restart the launcher and check v{version} in the footer.
 
-This update adds project settings: edit the name/customer, change the estimate or automatically use the unique packing-list VIN total, and delete a project after typing its name. Deletion affects only that project. Existing data is retained when updating as described above.
+This update adds configurable carrier detail exports, selected-VIN exports, and single or combined load announcement tables with VIN, model, truck plate and ETD. Copy a formatted table or download CSV, select columns and row scope, and check missing planning details before announcing. Existing data is retained when updating as described above.
 
 SHA-256: `{digest}`
 ''')

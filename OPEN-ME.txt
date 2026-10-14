@@ -1,4 +1,4 @@
-RYAN TMS v0.6.0 - Open the dashboard on your Windows computer
+RYAN TMS v0.7.0 - Open the dashboard on your Windows computer
 
 1. Install Node.js version 24 from https://nodejs.org if you do not have it.
 2. Extract the entire ZIP file to a folder on your computer.
@@ -8,6 +8,9 @@ RYAN TMS v0.6.0 - Open the dashboard on your Windows computer
 6. Keep the command window open while using the app.
 
 The dashboard includes:
+- Export carrier details: copy models, VINs, route details and chosen columns.
+- Export announcement: copy saved VINs, models, truck plates and ETD per load.
+- Export load announcements: multiple built loads separated with blank rows.
 - Project settings: rename the project and edit its customer/brand.
 - Volume settings: edit the estimate or follow packing-list VIN totals.
 - Delete project: type its name to confirm deleting its records.
@@ -36,7 +39,24 @@ Extract this ZIP into the SAME parent folder so the Ryan-TMS folder merges
 with your existing Ryan-TMS folder. Replace application files when asked.
 DO NOT delete the old folder or its data directory first.
 This ZIP contains no data folder and does not replace your existing database.
-Start START-TMS.cmd again, refresh Edge, and check v0.6.0 in the footer.
+Start START-TMS.cmd again, refresh Edge, and check v0.7.0 in the footer.
+
+TO COPY DETAILS TO CARRIER SHEETS
+Open Carriers, choose a carrier, then Export carrier details.
+Choose the rows and columns, then Copy table and paste into Google Sheets.
+You can also Download CSV, or export selected VINs from Unit register.
+Prices/revenue are optional; the default carrier export excludes them.
+If clipboard access is blocked, use Manual copy / spreadsheet text,
+Select export text, then Ctrl+C and paste into the first spreadsheet cell.
+
+TO ANNOUNCE A LOAD
+Open Load builds and click Export announcement under a detected load.
+Or open a load, save any changed planning, then Export announcement.
+The default table includes Load, VIN, Model, Carrier, Truck plate and ETD,
+plus POL/POD city and Reference. Check any missing truck/ETD warnings.
+Copy table and paste into your announcement; sending is up to you.
+Export load announcements above the cards exports all that carrier's loads.
+Group loads with blank rows separates them; unbuilt VINs are excluded.
 
 TO EDIT PROJECT NAME OR VOLUME
 Open Project settings next to Import units on the dashboard.

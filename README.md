@@ -4,7 +4,7 @@ A mini TMS for vehicle spot transport and shunting, starting with a Maxus projec
 
 ## Open it on your Windows computer
 
-[Download the v0.6.0 Windows ZIP](https://github.com/RyanKYChan/Ryan-TMS/raw/refs/heads/main/downloads/ryan-tms-windows-v0.6.0.zip)
+[Download the v0.7.0 Windows ZIP](https://github.com/RyanKYChan/Ryan-TMS/raw/refs/heads/main/downloads/ryan-tms-windows-v0.7.0.zip)
 
 ChatGPT's cloud environment page does not expose the web app. The server must run on your own computer, or the app needs a separate hosted deployment. Opening the HTML files directly does not start the API.
 
@@ -14,7 +14,7 @@ The launcher can also be run using `npm run open` after dependencies and the pro
 
 ## Update an existing Windows installation
 
-Close the app's command window first. Make a backup copy of your existing `data` folder. Extract the new ZIP into the same parent folder so its `Ryan-TMS` folder merges with your current `Ryan-TMS` folder; replace application files when prompted. **Do not delete the old folder or its `data` directory.** The ZIP contains no database or `data` folder, so merging it does not replace your existing packing lists. Start `START-TMS.cmd` again and refresh Edge. Version 0.6.0 appears in the footer. Existing packing lists, notes, dates, and load assignments are retained; the database gains project volume settings automatically. Existing unit prices remain unit costs.
+Close the app's command window first. Make a backup copy of your existing `data` folder. Extract the new ZIP into the same parent folder so its `Ryan-TMS` folder merges with your current `Ryan-TMS` folder; replace application files when prompted. **Do not delete the old folder or its `data` directory.** The ZIP contains no database or `data` folder, so merging it does not replace your existing packing lists. Start `START-TMS.cmd` again and refresh Edge. Version 0.7.0 appears in the footer. Existing packing lists, notes, dates, and load assignments are retained; this export update uses your existing database without schema changes. Existing unit prices remain unit costs.
 
 You can re-paste an existing packing list with its original name to fill previously missed columns. Matching VINs update in place rather than creating duplicates.
 
@@ -88,6 +88,19 @@ For a sheet with twelve dated/trucked groups of six VINs followed by 128 unplann
 **Carriers** remains available for allocation, copying VINs, milestone coverage, and sheet check history. Its paste area uses the same full-sheet rules. **Load builds** displays the whole selected carrier batch with brand/model, reference/appointment, comments, POL/POD details, truck plate, and ETD/ATD/ETA/ATA. The overview and carrier comparison include progress and the not-load-built count.
 
 Google Sheets checks remain manual copy/paste. The [carrier sheet template](templates/carrier-sheet.tsv) supplies a reusable header row.
+
+## Carrier sheets and load announcements (v0.7.0)
+
+1. Open **Carriers**, choose the carrier, and click **Export carrier details**. The same action is available in **Load builds** beside the carrier paste action. VIN, brand/model, reference, comments, route/address details, dealer, milestones, carrier, truck, T1 and load reference are included by default.
+2. Expand **Choose export columns** to select which details to share. Prices and unit revenue are available but excluded from the default presets. VIN is always included; added columns are appended. Expand **Column order** and use its left/right controls to match an existing sheet header, including putting Brand before VIN.
+3. Choose all allocated VINs, current filtered rows or the not-load-built pool. There is no 50-row export limit. The unit register also offers **Export selected details** for any selected batch.
+4. Click **Copy table**, then paste into the first Google Sheets cell. It copies both spreadsheet text and a formatted HTML table for editors that accept tables. **Download CSV** supplies the same chosen rows/columns. If clipboard access is blocked, expand **Manual copy / spreadsheet text**, click **Select export text**, and press Ctrl+C.
+5. For announcements, click **Export announcement** beneath a detected load card or inside the saved load. Choose **Export load announcements** above the built loads to export all built loads for the selected carrier. Unbuilt VINs are excluded from these combined announcements.
+6. Announcement defaults are Load, VIN, Model, Carrier, Truck plate, ETD, POL/POD city and Reference. Each row uses its own saved values; different truck plates or dates within a load stay distinct. Missing plates or ETDs are flagged, and blanks remain blank. Save any edited load planning before exporting from its detail dialog.
+
+**Group loads with blank rows** separates each load and puts the unbuilt pool last. It starts enabled for announcements and for carrier exports that contain built loads. Turn it off to keep packing-list order across the whole batch. **Include column headers** can be turned off when pasting into an existing sheet header. Dates default to `YYYY-MM-DD HH:mm` in the browser timezone displayed in the dialog; **ISO dates with timezone** retains exact instants in UTC. CSV/text quoting preserves multiline comments, tabs, commas and quotes. Spreadsheet formula prefixes and leading-zero/long numeric codes are exported as text to avoid evaluation or numeric conversion.
+
+Exports use saved records and do not change units, load assignments or sheet history. Copying an announcement prepares its table; sending it remains your normal workflow.
 
 ## Project settings (v0.6.0)
 

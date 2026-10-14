@@ -1,17 +1,20 @@
+import SheetExportDialog from './SheetExportDialog';
 import { useState } from 'react';
 import { Truck, ArrowRight, Plus, Check, Search } from 'lucide-react';
 import type { Load, Unit } from './types';
 import { api, Modal, Field, Badge, formatDate, toInput, toIso, timezone } from './shared';
 export default function LoadDialog({load,units,projectId,onClose,onDone}:{load?:Load;units:Unit[];projectId:string;onClose:()=>void;onDone:(message:string)=>Promise<void>}){
   const [form,setForm]=useState({reference:load?.reference||'',carrier:load?.carrier||'',truck:load?.truck||'',driver:load?.driver||'',capacity:load?.capacity||8,origin:load?.origin||'',destination:load?.destination||'',etd:toInput(load?.etd||''),eta:toInput(load?.eta||''),notes:load?.notes||'',cost:load?.cost||'',revenue:load?.revenue||''});
-  const [error,setError]=useState(''),[busy,setBusy]=useState(false),[selected,setSelected]=useState<string[]>([]),[search,setSearch]=useState(''),[milestone,setMilestone]=useState('atd'),[time,setTime]=useState(toInput(new Date().toISOString()));
+  const [exporting,setExporting]=useState(false),[error,setError]=useState(''),[busy,setBusy]=useState(false),[selected,setSelected]=useState<string[]>([]),[search,setSearch]=useState(''),[milestone,setMilestone]=useState('atd'),[time,setTime]=useState(toInput(new Date().toISOString()));
   const assigned=units.filter(u=>u.load_id===load?.id);
+  const planningUnsaved=load&&(['reference','carrier','truck','origin','destination'] as const).some(f=>form[f]!==load[f])||!!load&&(form.etd!==toInput(load.etd)||form.eta!==toInput(load.eta));
   const available=units.filter(u=>!u.load_id&&!['in_transit','delivered'].includes(u.status)&&`${u.vin} ${u.model} ${u.destination}`.toLowerCase().includes(search.toLowerCase()));
   const set=(f:string,v:string|number)=>setForm(x=>({...x,[f]:v}));
   async function action(fn:()=>Promise<unknown>,message:string,close=false){setBusy(true);setError('');try{await fn();await onDone(message);setSelected([]);if(close)onClose();}catch(e){setError((e as Error).message);}finally{setBusy(false);}}
   function save(e:React.FormEvent){e.preventDefault();void action(()=>api(`/api/projects/${projectId}/loads${load?'/'+load.id:''}`,load?'PATCH':'POST',{...form,...(!load?{cost:form.cost||undefined,revenue:form.revenue||undefined}:{}),etd:toIso(form.etd),eta:toIso(form.eta)}),load?'Load updated; route, carrier and planned dates synced to its units':'Load created',true);}
   return <Modal wide title={load?load.reference:'Build a new load'} subtitle={load?'Plan the movement, assign vehicles, and record actual milestones.':'Create a movement for transport or shunting. Assign vehicles after saving.'} onClose={onClose}>
     <div className="modal-body">
+      {load&&<div className="load-announcement-bar"><div><strong>Load announcement</strong><p>{planningUnsaved?'Save planning changes before exporting the announcement.':'Copy saved VINs, models, truck plates and ETD as a table.'}</p></div><button className="secondary" disabled={busy||!assigned.length||planningUnsaved} onClick={()=>setExporting(true)}>Export announcement</button></div>}
       <form onSubmit={save}><div className="form-grid three">
         <Field label="Load reference *"><input required maxLength={100} value={form.reference} onChange={e=>set('reference',e.target.value)} placeholder="e.g. MX-001"/></Field>
         <Field label="Carrier"><input maxLength={100} value={form.carrier} onChange={e=>set('carrier',e.target.value)} placeholder="Transport company"/></Field>
@@ -33,6 +36,7 @@ export default function LoadDialog({load,units,projectId,onClose,onDone}:{load?:
         <div className="unit-picker">{available.map(u=><label key={u.id} className={selected.includes(u.id)?'selected':''}><input type="checkbox" checked={selected.includes(u.id)} onChange={e=>setSelected(s=>e.target.checked?[...s,u.id]:s.filter(id=>id!==u.id))}/><span className="mono">{u.vin}</span><span>{u.model||'Vehicle'}</span><span>{u.destination||'No destination'}</span></label>)}{!available.length&&<p className="muted small">No available units match. Import more vehicles or change your search.</p>}</div>
         <div className="modal-footer"><span>{selected.length} selected · {load.capacity-assigned.length} spaces remaining</span><button className="primary" disabled={busy||!selected.length||selected.length>load.capacity-assigned.length} onClick={()=>action(()=>api(`/api/projects/${projectId}/loads/${load.id}/assign`,'POST',{unitIds:selected}),`${selected.length} units assigned to ${load.reference}`)}>Assign to load<ArrowRight size={16}/></button></div>
       </>}
+      {exporting&&load&&<SheetExportDialog title={load.reference} units={assigned} announcement onClose={()=>setExporting(false)}/>}
       {error&&<div className="error" role="alert">{error}</div>}
     </div>
   </Modal>;

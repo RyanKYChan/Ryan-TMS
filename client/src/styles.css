@@ -70,3 +70,24 @@
 .project-export {margin:10px 0 18px}
 .no-projects {margin-top:24px}
 @media(max-width:700px){.project-delete-area{flex-direction:column;align-items:start}}
+.export-options {display:flex;flex-wrap:wrap;gap:16px;margin:18px 0}
+.export-options label,.export-column-grid label {display:flex;align-items:center;gap:8px;font-size:12px;cursor:pointer}
+.export-column-grid {display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:13px;padding:16px 0}
+.export-presets {display:flex;gap:12px;flex-wrap:wrap;padding-top:15px}
+.export-preview {margin:18px 0;max-height:360px;overflow:auto}
+.export-preview td {white-space:pre-wrap;min-width:110px;max-width:260px}
+.export-text summary {font-size:12px;cursor:pointer;color:#677a6f;padding:12px 0}
+.export-text textarea {width:100%;font-family:monospace;font-size:11px;white-space:pre;overflow:auto;border:1px solid #dce3df;border-radius:6px;padding:12px}
+.export-text button {margin-top:10px}
+.load-export-card>.load-card {width:100%}
+.announcement-action {margin:9px 0 14px}
+.load-announcement-bar {display:flex;align-items:center;justify-content:space-between;gap:16px;padding:15px;background:#f2f6ed;border:1px solid #dce7d2;border-radius:7px;margin-bottom:22px}
+.load-announcement-bar strong {font-size:13px}
+.load-announcement-bar p {font-size:11px;color:#76876b;margin-top:5px}
+@media(max-width:700px){.export-column-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.load-announcement-bar{flex-direction:column;align-items:start}.section-heading>.heading-actions,.load-sheet-heading>.heading-actions{flex-wrap:wrap}.export-options{gap:12px}}
+.export-preview .export-vin {min-width:175px;white-space:nowrap;overflow-wrap:normal}
+.export-preview .export-date {min-width:150px;white-space:nowrap}
+.export-order>summary {font-size:12px;color:#677a6f;cursor:pointer;padding:12px 0}
+.export-order-list {display:flex;flex-wrap:wrap;gap:8px;padding:6px 0 12px}
+.export-order-list>div {display:flex;align-items:center;gap:5px;border:1px solid #dce3df;border-radius:6px;padding:3px 6px;font-size:11px}
+.export-order-list .icon-button {width:25px;height:25px}
