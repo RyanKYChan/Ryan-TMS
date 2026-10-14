@@ -1,4 +1,4 @@
-RYAN TMS v0.7.0 - Open the dashboard on your Windows computer
+RYAN TMS v0.7.1 - Open the dashboard on your Windows computer
 
 1. Install Node.js version 24 from https://nodejs.org if you do not have it.
 2. Extract the entire ZIP file to a folder on your computer.
@@ -39,7 +39,7 @@ Extract this ZIP into the SAME parent folder so the Ryan-TMS folder merges
 with your existing Ryan-TMS folder. Replace application files when asked.
 DO NOT delete the old folder or its data directory first.
 This ZIP contains no data folder and does not replace your existing database.
-Start START-TMS.cmd again, refresh Edge, and check v0.7.0 in the footer.
+Start START-TMS.cmd again, refresh Edge, and check v0.7.1 in the footer.
 
 TO COPY DETAILS TO CARRIER SHEETS
 Open Carriers, choose a carrier, then Export carrier details.
@@ -54,6 +54,10 @@ Open Load builds and click Export announcement under a detected load.
 Or open a load, save any changed planning, then Export announcement.
 The default table includes Load, VIN, Model, Carrier, Truck plate and ETD,
 plus POL/POD city and Reference. Check any missing truck/ETD warnings.
+Dates show the date only by default. Tick Include hours and minutes to add
+the saved time. This works for announcements and carrier detail exports.
+ISO dates with timezone is available when times are included.
+Hiding the time does not change the dates or times stored in the TMS.
 Copy table and paste into your announcement; sending is up to you.
 Export load announcements above the cards exports all that carrier's loads.
 Group loads with blank rows separates them; unbuilt VINs are excluded.

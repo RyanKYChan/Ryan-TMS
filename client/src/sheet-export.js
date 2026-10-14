@@ -8,13 +8,13 @@ export const exportColumns=[
 export const carrierFields=exportColumns.filter(([f])=>!['price','revenue','status','packing_list'].includes(f)).map(([f])=>f);
 export const announcementFields=['load_ref','vin','model','carrier','truck','etd','origin','destination','reference'];
 const stages={unscheduled:'Unscheduled',scheduled:'Scheduled',ready:'Ready to go',in_transit:'In transit',delivered:'Delivered'};
-export function exportDate(value,timeZone,iso=false){
+export function exportDate(value,timeZone,iso=false,includeTime=false){
   if(!value)return '';
-  if(iso)return new Date(value).toISOString();
+  if(iso&&includeTime)return new Date(value).toISOString();
   const parts=Object.fromEntries(new Intl.DateTimeFormat('en-GB',{timeZone,year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).formatToParts(new Date(value)).map(p=>[p.type,p.value]));
-  return `${parts.year}-${parts.month}-${parts.day} ${parts.hour}:${parts.minute}`;
+  return `${parts.year}-${parts.month}-${parts.day}`+(includeTime?` ${parts.hour}:${parts.minute}`:'');
 }
-export function exportMatrix(units,fields,{timeZone='Europe/Amsterdam',isoDates=false,headers=true,groupLoads=false}={}){
+export function exportMatrix(units,fields,{timeZone='Europe/Amsterdam',isoDates=false,includeTime=false,headers=true,groupLoads=false}={}){
   const valid=new Set(exportColumns.map(([f])=>f));
   if(!fields.length||new Set(fields).size!==fields.length||fields.some(f=>!valid.has(f)))throw new Error('Choose unique export columns.');
   const rows=headers?[fields.map(f=>exportColumns.find(([key])=>key===f)[1])]:[];
@@ -24,7 +24,7 @@ export function exportMatrix(units,fields,{timeZone='Europe/Amsterdam',isoDates=
   const ordered=[...groups].filter(([id])=>id);if(groups.has(''))ordered.push(['',groups.get('')]);
   for(let i=0;i<ordered.length;i++){
     if(i&&groupLoads)rows.push(fields.map(()=>''));
-    for(const u of ordered[i][1])rows.push(fields.map(f=>['etd','eta','atd','ata'].includes(f)?exportDate(u[f],timeZone,isoDates):f==='status'?(stages[u.status]||u.status||''):String(u[f]??'')));
+    for(const u of ordered[i][1])rows.push(fields.map(f=>['etd','eta','atd','ata'].includes(f)?exportDate(u[f],timeZone,isoDates,includeTime):f==='status'?(stages[u.status]||u.status||''):String(u[f]??'')));
   }
   return rows;
 }
