@@ -91,3 +91,12 @@
 .export-order-list {display:flex;flex-wrap:wrap;gap:8px;padding:6px 0 12px}
 .export-order-list>div {display:flex;align-items:center;gap:5px;border:1px solid #dce3df;border-radius:6px;padding:3px 6px;font-size:11px}
 .export-order-list .icon-button {width:25px;height:25px}
+.visit-badge {display:inline-flex;padding:5px 9px;border-radius:5px;font-size:10px;font-weight:650;white-space:nowrap;background:#edf0ed;color:#657366}
+.visit-badge.planned {background:#eaf1fc;color:#365b8d}.visit-badge.announced {background:#eee9fa;color:#6953a1}.visit-badge.arrived {background:#fff0d6;color:#98702b}.visit-badge.completed {background:#e5f2e7;color:#396d43}.visit-badge.cancelled {background:#f5e9e5;color:#965849}.visit-badge.changed {background:#ffeadc;color:#ad4f24}
+.stripping-workspace>.panel {margin:22px 0}.stripping-workspace .metric-grid {margin-top:20px}
+.visit-toolbar {display:flex;gap:14px;flex-wrap:wrap;padding:0 24px 18px;align-items:end}.visit-toolbar .field {min-width:160px;flex:1}
+.visit-row-actions {display:flex;flex-wrap:wrap;gap:8px;min-width:140px}.visit-table {min-width:1100px}.visit-table td {vertical-align:top}.visit-table .sheet-cell {min-width:160px;max-width:250px}
+.visit-attention-grid {display:grid;grid-template-columns:repeat(4,minmax(0,1fr));padding:0 24px 24px;gap:16px}.visit-attention-grid button {border:1px solid #e0e7dc;background:#f7f9f4;text-align:left;border-radius:7px;padding:14px;font-size:12px;line-height:1.7}.visit-attention-grid b {display:block;font-size:24px;font-family:'Manrope Variable',sans-serif}
+.visit-day-heading {display:flex;align-items:center;justify-content:space-between;font-size:12px;color:#69816e}.visit-day-heading button {border:0;background:#edf3e7;color:#557140;border-radius:4px;cursor:pointer;width:23px;height:23px}.calendar-event.cancelled {opacity:.55;text-decoration:line-through}
+.visit-history {padding:0 24px 20px;max-height:350px;overflow:auto}.visit-history>div {display:flex;gap:14px;border-bottom:1px solid #e8ece4;padding:12px 0;font-size:12px;align-items:start}.visit-history span {min-width:100px;color:#819376;font-size:10px}.visit-history p {white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.6}.visit-vins {margin-top:20px}
+@media(max-width:700px){.visit-toolbar{padding:0 16px 16px;gap:10px}.visit-toolbar .field{min-width:130px}.visit-attention-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.visit-history>div{flex-direction:column;gap:5px}.stripping-workspace .section-heading,.stripping-workspace .panel-heading{flex-wrap:wrap;gap:14px}}

@@ -1,10 +1,10 @@
 # RYAN · Transport operations
 
-A mini TMS for vehicle spot transport and shunting, starting with a Maxus project of 400 expected units. Projects, customers, packing lists, and loads are reusable for future work.
+A mini TMS for vehicle spot transport and shunting, starting with a Maxus project of 400 expected units. Projects, customers, packing lists, and loads are reusable for future work. Ad hoc container-stripping projects can instead plan truck visits before any VINs are known.
 
 ## Open it on your Windows computer
 
-[Download the v0.7.1 Windows ZIP](https://github.com/RyanKYChan/Ryan-TMS/raw/refs/heads/main/downloads/ryan-tms-windows-v0.7.1.zip)
+[Download the v0.8.0 Windows ZIP](https://github.com/RyanKYChan/Ryan-TMS/raw/refs/heads/main/downloads/ryan-tms-windows-v0.8.0.zip)
 
 ChatGPT's cloud environment page does not expose the web app. The server must run on your own computer, or the app needs a separate hosted deployment. Opening the HTML files directly does not start the API.
 
@@ -14,7 +14,7 @@ The launcher can also be run using `npm run open` after dependencies and the pro
 
 ## Update an existing Windows installation
 
-Close the app's command window first. Make a backup copy of your existing `data` folder. Extract the new ZIP into the same parent folder so its `Ryan-TMS` folder merges with your current `Ryan-TMS` folder; replace application files when prompted. **Do not delete the old folder or its `data` directory.** The ZIP contains no database or `data` folder, so merging it does not replace your existing packing lists. Start `START-TMS.cmd` again and refresh Edge. Version 0.7.1 appears in the footer. Existing packing lists, notes, dates, and load assignments are retained; this export update uses your existing database without schema changes. Existing unit prices remain unit costs.
+Close the app's command window first. Make a backup copy of your existing `data` folder. Extract the new ZIP into the same parent folder so its `Ryan-TMS` folder merges with your current `Ryan-TMS` folder; replace application files when prompted. **Do not delete the old folder or its `data` directory.** The ZIP contains no database or `data` folder, so merging it does not replace your existing packing lists. Start `START-TMS.cmd` again and refresh Edge. Version 0.8.0 appears in the footer. Existing packing lists, notes, dates, and load assignments are retained; the database gains truck-visit tracking and a carrier/truck bank automatically. Existing projects remain vehicle/VIN projects. Existing unit prices remain unit costs.
 
 You can re-paste an existing packing list with its original name to fill previously missed columns. Matching VINs update in place rather than creating duplicates.
 
@@ -36,6 +36,21 @@ npm start
 ```
 
 The repository is an existing checkout in an isolated cloud workspace; do not create another worktree for ordinary development.
+
+## Ad hoc container stripping (v0.8.0)
+
+1. Click **New project**, choose **Ad hoc container stripping · truck visits**, and enter the project name and default pickup yard. Estimated volume can be **0 if unknown**. Existing projects keep the vehicle/VIN workflow; project type is fixed after creation.
+2. Use **Carrier & truck bank** to add carriers, ops contacts and reusable truck/trailer plates, driver names and phone numbers. You can also enter a new carrier directly when creating a visit. Saved bank entries prefill the next booking; editing the bank does not rewrite older visits.
+3. Click **New truck visit** or the **+** on a calendar day. Choose a carrier and enter any known plate/driver details, pickup yard, **ETD pickup date**, optional time/slot, delivery destination, ETA, quantities, container/batch and references. A booking can start with unknown date, identity or unit quantity; VINs are not required.
+4. A new visit prepares a **copy-ready yard announcement** after saving when date, yard and either truck plate or driver are known. Copy the table into your usual yard message and click **Mark as announced** after sending. The app prepares the table; it does not send messages automatically. Columns can be selected; dates default to date-only and **Include hours and minutes** adds slots and milestone times.
+5. **Yard announcements** collects pending visits and changes requiring another announcement. Select multiple visits or prepare all pending rows matching your filters. Copying or downloading does not mark a visit as announced. If a visit changes after its announcement preview, the server rejects marking the stale version as announced.
+6. In **Truck visits**, use **Edit / swap truck** to replace a plate, driver, carrier or pickup slot. The same visit and its VIN links are retained, before/after changes are kept in its history, and previously announced active visits are flagged **Needs re-announcement**. A driver dropout can be recorded as Cancelled, then re-planned with a replacement while it has no actual departure/arrival. Departed/delivered pickups cannot be cancelled.
+7. **Calendar** displays ETD pickups, ETA delivery arrivals, or both, with carrier, progress and text filters. Slots remain unknown when none was entered. Cancelled bookings are hidden unless requested; undated visits remain in the register and attention counts. Click a booking to edit it.
+8. Track **Planned → Announced → At yard → Completed pickup**, or Cancelled. **At yard** records the operational arrival at the pickup yard; it is separate from ATA. **ETD/ATD are departure from the pickup yard; ETA/ATA are arrival at the delivery destination.** Recording ATD or ATA completes the pickup stage. Completing a pickup without any supplied actual milestone records departure at the current time; enter historical ATD explicitly when recording an earlier movement. Existing actual milestones are preserved.
+9. Add VINs whenever known: open a visit and choose **Add VINs after stripping**, or use **Confirmed VINs → Add VINs to a visit**. Paste VINs only or a table with VIN/model and other usual fields. Imports validate the whole batch, update matching VINs in place and attach them to the visit, including completed pickups. The visit supplies carrier/plate and missing milestones. Moving a VIN from another planned visit requires the explicit move option; departed VINs cannot be moved this way. Detaching a mistaken link keeps the VIN record and its milestones.
+10. **Confirmed VINs** displays and exports post-strip records. Expected units, reported actual pickup units and confirmed VIN count remain separate; a VIN paste does not invent a reported actual quantity. Visit planning changes update linked VIN planning; recorded actual timestamps remain intact.
+
+The stripping dashboard shows active/today visits, announcement work, at-yard trucks, completed pickups, missing identity/date information, and reported quantities. **Export CSV** downloads the project's full truck-visit register. Back up the whole `data` folder for a complete database backup, including truck bank, history and confirmed VINs. Project deletion includes the new records and affects only the selected project.
 
 ## First real packing list
 

@@ -9,7 +9,7 @@ export function ensureCarrier(db, projectId, name) {
   const old=db.prepare('SELECT * FROM carriers WHERE project_id=? AND name=? COLLATE NOCASE').get(projectId,canonical);
   if(old)return old;
   const c={id:randomUUID(),project_id:projectId,name:canonical,created_at:new Date().toISOString()};
-  db.prepare('INSERT INTO carriers VALUES(?,?,?,?)').run(c.id,c.project_id,c.name,c.created_at);
+  db.prepare('INSERT INTO carriers(id,project_id,name,created_at) VALUES(?,?,?,?)').run(c.id,c.project_id,c.name,c.created_at);
   return c;
 }
 const same=(a,b)=>String(a||'').toLowerCase()===String(b||'').toLowerCase();

@@ -1,4 +1,5 @@
 import { registerFinanceRoutes } from './finance.js';
+import { registerVisitRoutes, visitSummary } from './visits.js';
 import express from 'express';
 import { randomUUID } from 'node:crypto';
 import { FIELDS, cleanVin, validateVin, validateUnit, status, exportCsv, planBulkEdit } from './domain.js';
@@ -16,7 +17,7 @@ export function createApp(db) {
     return {...p,estimated_target:p.target,imported_count,target:p.volume_mode==='packing_list'?imported_count:p.target};
   };
   const project = id => projectSummary(db.prepare('SELECT * FROM projects WHERE id=?').get(id) || fail('Project not found.',404));
-  const event = (p, u, description) => db.prepare('INSERT INTO events VALUES(?,?,?,?,?)').run(randomUUID(),p,u,description,now());
+  const event = (p, u, description,visitId=null) => db.prepare('INSERT INTO events(id,project_id,unit_id,description,created_at,truck_visit_id) VALUES(?,?,?,?,?,?)').run(randomUUID(),p,u,description,now(),visitId);
   const text = (v, max=500) => typeof v === 'string' && v.length <= max ? v.trim() : fail(`Text must be at most ${max} characters.`);
   const count = (v,min,max) => Number.isInteger(v) && v>=min && v<=max ? v : fail(`Enter a whole number between ${min} and ${max}.`);
   const units = p => db.prepare(`SELECT u.*, pl.name AS packing_list, l.reference AS load_ref FROM units u
@@ -28,16 +29,19 @@ export function createApp(db) {
   app.get('/api/projects', (_req,res) => res.json(db.prepare('SELECT * FROM projects ORDER BY created_at').all().map(projectSummary)));
   app.post('/api/projects', (req,res) => {
     const name = text(req.body.name,100); if (!name) fail('Project name is required.');
-    const p = {id:randomUUID(),name,customer:text(req.body.customer ?? '',100),target:count(req.body.target ?? 400,1,100000),created_at:now()};
-    db.prepare('INSERT INTO projects(id,name,customer,target,created_at) VALUES(?,?,?,?,?)').run(p.id,p.name,p.customer,p.target,p.created_at);
+    const kind=req.body.project_type??'vin';if(!['vin','stripping'].includes(kind))fail('Choose a valid project type.');
+    const p = {id:randomUUID(),name,customer:text(req.body.customer ?? '',100),target:count(req.body.target ?? (kind==='stripping'?0:400),kind==='stripping'?0:1,100000),created_at:now(),project_type:kind,yard:text(req.body.yard??'',500)};
+    db.prepare('INSERT INTO projects(id,name,customer,target,created_at,project_type,yard) VALUES(?,?,?,?,?,?,?)').run(p.id,p.name,p.customer,p.target,p.created_at,p.project_type,p.yard);
     res.status(201).json(project(p.id));
   });
   app.patch('/api/projects/:p', (req,res) => {
     const p=project(req.params.p),update={};
     for(const f of ['name','customer'])if(req.body[f]!==undefined)update[f]=text(req.body[f],100);
     if(update.name==='')fail('Project name is required.');
-    if(req.body.target!==undefined)update.target=count(req.body.target,1,100000);
-    if(req.body.volume_mode!==undefined){if(!['estimate','packing_list'].includes(req.body.volume_mode))fail('Choose an estimate or the packing-list total.');update.volume_mode=req.body.volume_mode;}
+    if(req.body.project_type!==undefined&&req.body.project_type!==p.project_type)fail('Project type is fixed after creation. Create a separate project for another workflow.');
+    if(req.body.yard!==undefined)update.yard=text(req.body.yard,500);
+    if(req.body.target!==undefined)update.target=count(req.body.target,p.project_type==='stripping'?0:1,100000);
+    if(req.body.volume_mode!==undefined){if(!['estimate','packing_list'].includes(req.body.volume_mode))fail('Choose an estimate or the packing-list total.');if(p.project_type==='stripping'&&req.body.volume_mode!=='estimate')fail('Stripping volume is tracked through visits, without a packing-list target.');update.volume_mode=req.body.volume_mode;}
     const entries=Object.entries(update);if(!entries.length)fail('No project settings to update.');
     transaction(db,()=>{
       db.prepare(`UPDATE projects SET ${entries.map(([f])=>`${f}=?`).join(',')} WHERE id=?`).run(...entries.map(([,v])=>v),p.id);
@@ -48,13 +52,13 @@ export function createApp(db) {
     const p=project(req.params.p);
     if(req.body?.confirmName!==p.name)fail('Type the current project name to confirm deletion.');
     transaction(db,()=>{
-      for(const table of ['schedule_alerts','events','carrier_updates','units','loads','packing_lists','carriers'])db.prepare(`DELETE FROM ${table} WHERE project_id=?`).run(p.id);
+      for(const table of ['schedule_alerts','events','carrier_updates','units','truck_visits','project_trucks','loads','packing_lists','carriers'])db.prepare(`DELETE FROM ${table} WHERE project_id=?`).run(p.id);
       db.prepare('DELETE FROM projects WHERE id=?').run(p.id);
     });res.json({deleted:p.id});
   });
   app.get('/api/projects/:p/workspace', (req,res) => {
     const p=project(req.params.p);
-    res.json({project:p,units:units(p.id),loads:db.prepare('SELECT * FROM loads WHERE project_id=? ORDER BY created_at DESC').all(p.id),
+    res.json({truckVisits:db.prepare('SELECT v.*,c.name AS carrier FROM truck_visits v JOIN carriers c ON c.id=v.carrier_id WHERE v.project_id=? ORDER BY v.pickup_date,v.pickup_time,v.created_at').all(p.id).map(visitSummary),truckBank:db.prepare('SELECT t.*,c.name AS carrier FROM project_trucks t JOIN carriers c ON c.id=t.carrier_id WHERE t.project_id=? ORDER BY c.name,t.truck,t.driver').all(p.id),project:p,units:units(p.id),loads:db.prepare('SELECT * FROM loads WHERE project_id=? ORDER BY created_at DESC').all(p.id),
       packingLists:db.prepare('SELECT * FROM packing_lists WHERE project_id=? ORDER BY created_at DESC').all(p.id),
       carriers:db.prepare(`SELECT c.*, (SELECT max(created_at) FROM carrier_updates WHERE carrier_id=c.id) AS last_update FROM carriers c WHERE project_id=? ORDER BY name`).all(p.id),
       carrierUpdates:db.prepare('SELECT * FROM carrier_updates WHERE project_id=? ORDER BY created_at DESC LIMIT 100').all(p.id),
@@ -187,11 +191,12 @@ export function createApp(db) {
     transaction(db,()=>{for(const u of pending){db.prepare(`UPDATE units SET ${field}=?,updated_at=? WHERE id=?`).run(value,now(),u.id);event(p,u.id,`${field==='atd'?'Departed':'Delivered'} on load ${l.reference}`);}});
     res.json({updated:pending.length});
   });
+  registerVisitRoutes(app,db,{project,event,fail,text,now});
   registerFinanceRoutes(app,db,{project,units,event,fail,text,now});
   registerCarrierRoutes(app,db,{project,units,unitById,event,fail,text,now});
   app.use('/api',(_req,res)=>res.status(404).json({error:'API endpoint not found.'}));
   app.use((e,_req,res,_next)=>{
-    if(e.code==='ERR_SQLITE_ERROR' && /UNIQUE constraint/.test(e.message))return res.status(409).json({error:'This VIN, packing list, or load reference already exists in the project.'});
+    if(e.code==='ERR_SQLITE_ERROR' && /UNIQUE constraint/.test(e.message))return res.status(409).json({error:'This record already exists in the project. Check the VIN, reference, carrier or saved truck plate.'});
     const s=e.status || 500;
     if(s===500)console.error(e);
     res.status(s).json({error:s===500?'Unexpected server error. Please retry.':e.message});

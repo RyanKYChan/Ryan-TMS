@@ -1,4 +1,4 @@
-RYAN TMS v0.7.1 - Open the dashboard on your Windows computer
+RYAN TMS v0.8.0 - Open the dashboard on your Windows computer
 
 1. Install Node.js version 24 from https://nodejs.org if you do not have it.
 2. Extract the entire ZIP file to a folder on your computer.
@@ -8,6 +8,11 @@ RYAN TMS v0.7.1 - Open the dashboard on your Windows computer
 6. Keep the command window open while using the app.
 
 The dashboard includes:
+- Project type: VIN transport or ad hoc container stripping without VINs.
+- Carrier & truck bank: reusable carriers, trucks, trailers and drivers.
+- Truck visits: spot-market bookings, plate/driver swaps and milestones.
+- Yard calendar and copy-ready announcements, with re-announcement alerts.
+- Confirmed VINs: add and link VINs after stripping, even after pickup.
 - Export carrier details: copy models, VINs, route details and chosen columns.
 - Export announcement: copy saved VINs, models, truck plates and ETD per load.
 - Export load announcements: multiple built loads separated with blank rows.
@@ -39,7 +44,36 @@ Extract this ZIP into the SAME parent folder so the Ryan-TMS folder merges
 with your existing Ryan-TMS folder. Replace application files when asked.
 DO NOT delete the old folder or its data directory first.
 This ZIP contains no data folder and does not replace your existing database.
-Start START-TMS.cmd again, refresh Edge, and check v0.7.1 in the footer.
+Start START-TMS.cmd again, refresh Edge, and check v0.8.0 in the footer.
+
+TO START AN AD HOC CONTAINER STRIPPING PROJECT
+Click New project and choose Ad hoc container stripping - truck visits.
+Enter the default pickup yard. Volume can be 0 when unknown.
+Use Carrier & truck bank to save contacts and reusable trucks/drivers.
+Click New truck visit, or + on a calendar day, to plan a pickup without VINs.
+The new visit can prepare its yard announcement automatically after saving.
+Copy the table to your usual yard message; Mark as announced after sending.
+Copying alone does not mark it announced, and the app does not send messages.
+
+TO HANDLE DRIVER SWAPS AND DROPOUTS
+Open Truck visits, then Edit / swap truck on the booking.
+Change the plate, driver, carrier or slot and save. The visit is retained.
+Changed announced visits are flagged Needs re-announcement.
+Use Yard announcements to prepare and confirm the updated message.
+Use Cancelled for a dropout; a visit without actual departure/arrival can be
+re-planned. Existing visit history and other bookings are kept.
+
+TO TRACK PICKUP MILESTONES AND ADD VINS LATER
+ETD/ATD mean departure from the pickup yard.
+ETA/ATA mean arrival at the delivery destination.
+At yard is a separate ops stage for arrival at the pickup yard.
+Enter actual departure/arrival when known. Actual milestones complete the
+pickup stage. For historical pickups, enter their actual ATD explicitly.
+To add VINs later, open the visit and click Add VINs after stripping.
+Paste VINs or VIN/model rows. Repeat pastes update matching VINs in place.
+Confirmed VINs shows all those records, linked to their truck visits.
+Visit edits sync linked VIN plans and fill missing actual timestamps.
+Reported actual quantity stays separate from the number of confirmed VINs.
 
 TO COPY DETAILS TO CARRIER SHEETS
 Open Carriers, choose a carrier, then Export carrier details.
