@@ -4,7 +4,7 @@ A mini TMS for vehicle spot transport and shunting, starting with a Maxus projec
 
 ## Open it on your Windows computer
 
-[Download the v0.8.0 Windows ZIP](https://github.com/RyanKYChan/Ryan-TMS/raw/refs/heads/main/downloads/ryan-tms-windows-v0.8.0.zip)
+[Download the v0.9.0 Windows ZIP](https://github.com/RyanKYChan/Ryan-TMS/raw/refs/heads/main/downloads/ryan-tms-windows-v0.9.0.zip)
 
 ChatGPT's cloud environment page does not expose the web app. The server must run on your own computer, or the app needs a separate hosted deployment. Opening the HTML files directly does not start the API.
 
@@ -14,7 +14,7 @@ The launcher can also be run using `npm run open` after dependencies and the pro
 
 ## Update an existing Windows installation
 
-Close the app's command window first. Make a backup copy of your existing `data` folder. Extract the new ZIP into the same parent folder so its `Ryan-TMS` folder merges with your current `Ryan-TMS` folder; replace application files when prompted. **Do not delete the old folder or its `data` directory.** The ZIP contains no database or `data` folder, so merging it does not replace your existing packing lists. Start `START-TMS.cmd` again and refresh Edge. Version 0.8.0 appears in the footer. Existing packing lists, notes, dates, and load assignments are retained; the database gains truck-visit tracking and a carrier/truck bank automatically. Existing projects remain vehicle/VIN projects. Existing unit prices remain unit costs.
+Close the app's command window first. Make a backup copy of your existing `data` folder. Extract the new ZIP into the same parent folder so its `Ryan-TMS` folder merges with your current `Ryan-TMS` folder; replace application files when prompted. **Do not delete the old folder or its `data` directory.** The ZIP contains no database or `data` folder, so merging it does not replace your existing packing lists. Start `START-TMS.cmd` again and refresh Edge. Version 0.9.0 appears in the footer. Existing packing lists, notes, dates, and load assignments are retained; the database gains saved unloading-yard defaults, yard-arrival deadlines and bulk truck bookings automatically. Existing visits, truck details and announcements stay saved. Existing projects remain vehicle/VIN projects. Existing unit prices remain unit costs.
 
 You can re-paste an existing packing list with its original name to fill previously missed columns. Matching VINs update in place rather than creating duplicates.
 
@@ -36,6 +36,19 @@ npm start
 ```
 
 The repository is an existing checkout in an isolated cloud workspace; do not create another worktree for ordinary development.
+
+## Saved yards and bulk truck bookings (v0.9.0)
+
+1. In a container-stripping project, open **Project settings** and save **Default pickup yard** (loading) and **Default unloading yard**. New single visits and bulk bookings fill both locations automatically. Individual visits can override them; changing project defaults keeps the route already saved on existing visits.
+2. Click **Bulk add trucks**, choose the carrier (or enter a new one), and paste its message. Click **Read pasted trucks**. One truck per line is supported, including `1580NBK/R2463BDC Ruben Muñoz`, spaced `/` separators, and headered tables with Truck plate, Trailer plate, Driver name and Driver phone.
+3. Check the editable truck/trailer/driver preview. Correct or remove rows, or add a missed truck manually. Unrecognised message lines stay visible and are kept as shared comments. If you change the source message, read it again before booking.
+4. Check the shared loading/unloading yards, arrival date and deadline. **Save these loading / unloading yards as project defaults** optionally saves a new route for next time. Optional ETD, delivery ETA, expected units per truck and pickup reference apply to the whole batch.
+5. **Book 4 trucks** saves four separate visits together and adds their details to the truck bank. All records are validated before committing; an invalid truck or date prevents partial bookings. Retry of the same submission reuses its saved batch. Re-pasting trucks already booked with the same carrier on the same date is rejected; open those visits to change them. A further trip by the same truck on that date can be created separately with **New truck visit**.
+6. The prepared announcement covers the batch. Dates stay date-only by default. Tick **Include hours and minutes** to include a yard-arrival deadline such as 18:00; the preview warns when the deadline time is omitted. Copy and send it through your usual channel, then **Mark as announced**.
+
+For the four-truck example ending in `Today till 18:00 should make to arrive`, the app sets **Yard arrival date = today** and **Arrive at yard by = 18:00** for all four visits. Today/tomorrow use the operator's local day when the message is read; check the date before saving. Explicit arrival dates such as `20/10/2026` or `2026-10-20` are supported too. Conflicting arrival instructions are flagged for manual entry. ETD (departure from the yard) and ETA (delivery arrival) are not guessed from a yard-arrival note.
+
+The **Calendar** defaults to yard arrivals, departures and deliveries, with a separate **Arrivals at loading yard** filter. Visits with an arrival deadline appear as **At yard · by 18:00** on their planned day. This calendar label is a planned appointment; use **Mark at yard** to record actual arrival. Yard-arrival date and deadline are editable on the visit; changing an announced deadline flags re-announcement.
 
 ## Ad hoc container stripping (v0.8.0)
 

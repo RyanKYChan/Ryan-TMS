@@ -96,3 +96,30 @@ test('Yard announcement milestones default to dates, while times can be included
  const v={reference:'VIS-TEST',carrier:'Test carrier',truck:'TEST-01',pickup_date:'2026-10-22',pickup_time:'10:00',etd:'2026-10-22T08:00:00Z',eta:'2026-10-23T08:00:00Z',atd:'',ata:'',time_zone:'Europe/Amsterdam'};
  assert.equal(visitMatrix([v],['etd','eta'])[1][0],'2026-10-22');assert.equal(visitMatrix([v],['etd','eta'],{includeTime:true})[1][0],'2026-10-22 10:00');assert.equal(visitMatrix([v],['pickup_time'])[1][0],'10:00');
 });
+
+test('Saved route defaults fill new bookings, explicit blanks remain blank, and existing visit locations stay unchanged',async t=>{
+ const f=await fixture(t);await f.req(f.base,'PATCH',{yard:'Loading yard',destination:'Unloading yard'});const first=await f.create();assert.equal(first.data.destination,'Unloading yard');assert.equal(first.data.yard,'Loading yard');
+ await f.req(f.base,'PATCH',{yard:'Next loading',destination:'Next unloading'});const second=await f.create({truck:'TEST-02'});assert.equal(second.data.yard,'Next loading');assert.equal(second.data.destination,'Next unloading');assert.equal((await f.ws()).truckVisits.find(v=>v.id===first.data.id).destination,'Unloading yard');
+ const blank=await f.create({truck:'TEST-03',destination:'',yard:''});assert.equal(blank.data.destination,'');assert.equal(blank.data.yard,'');
+ assert.equal((await f.req(f.base,'PATCH',{destination:'X'.repeat(501)})).status,400);
+});
+test('Bulk truck booking is atomic, preserves shared notes, prepares announcements without inventing ETD, and retries safely',async t=>{
+ const f=await fixture(t);await f.req(f.base,'PATCH',{destination:'Delivery yard'});
+ const body={request_id:'bulk-1',common:{carrier_id:'new',carrier_name:'Batch carrier',yard_arrival_date:'2026-10-15',yard_arrival_time:'18:00',notes:'Today till 18:00 should make to arrive',save_truck:true},rows:[{truck:'1580NBK',trailer:'R2463BDC',driver:'Ruben Muñoz'},{truck:'5086MZF',trailer:'R1026BDC',driver:'Dyma Odintsov'},{truck:'6602MSD',trailer:'R6665BCX',driver:'Jeones Osoya'},{truck:'9574MZM',trailer:'R2458BDC',driver:'Juan Perez'}]};
+ const result=await f.req(f.base+'/visits/bulk','POST',body);assert.equal(result.status,201,JSON.stringify(result));assert.equal(result.data.visits.length,4);let w=await f.ws();assert.equal(w.truckVisits.length,4);assert.equal(w.truckBank.length,4);assert.equal(w.carriers.length,1);
+ assert.ok(w.truckVisits.every(v=>v.yard==='Test yard'&&v.destination==='Delivery yard'&&v.yard_arrival_date==='2026-10-15'&&v.yard_arrival_time==='18:00'&&v.etd===''&&v.eta===''&&v.pickup_date===''&&v.announcement_ready&&v.notes===body.common.notes));
+ const retry=await f.req(f.base+'/visits/bulk','POST',body);assert.equal(retry.status,200);assert.equal(retry.data.replayed,true);assert.deepEqual(retry.data.visits.map(v=>v.id),result.data.visits.map(v=>v.id));assert.deepEqual(await f.ws(),w);
+ assert.equal((await f.req(f.base+'/visits/bulk','POST',{...body,common:{...body.common,notes:'changed'}})).status,409);assert.deepEqual(await f.ws(),w);
+ const rePaste=await f.req(f.base+'/visits/bulk','POST',{...body,request_id:'bulk-repeat'});assert.equal(rePaste.status,409);assert.deepEqual(await f.ws(),w);
+ assert.equal((await f.req(f.base+'/visits/announce','POST',{visits:result.data.visits.map(v=>({id:v.id,signature:v.announcement_signature}))})).status,200);w=await f.ws();assert.ok(w.truckVisits.every(v=>v.status==='announced'));
+ const v=w.truckVisits[0],changed=await f.req(f.base+`/visits/${v.id}`,'PATCH',{yard_arrival_time:'19:00'});assert.equal(changed.status,200);assert.equal(changed.data.needs_reannouncement,true);
+ assert.equal((await f.req(f.base+`/visits/${v.id}`,'PATCH',{status:'arrived'})).status,200);
+ const csv=await f.req(f.base+'/visits/export');assert.ok(csv.data.includes('Arrive at yard by'));assert.ok(csv.data.includes('19:00'));
+ assert.equal((await f.req(f.base,'DELETE',{confirmName:f.p.name})).status,200);assert.equal(f.db.prepare('SELECT count(*) AS n FROM visit_batches').get().n,0);
+});
+test('Invalid bulk rows, duplicate plates, scopes and arrival deadlines roll back carriers, bank, visits and activity together',async t=>{
+ const f=await fixture(t),before=await f.ws(),valid={request_id:'invalid-batch',common:{carrier_id:'new',carrier_name:'No partial saves',yard_arrival_date:'2026-10-20',save_truck:true},rows:[{truck:'FIRST-01',driver:'First'},{truck:'SECOND-02',driver:'Second'}]};
+ for(const changes of [{rows:[valid.rows[0],{truck:''}]},{rows:[valid.rows[0],{truck:'first-01'}]},{common:{...valid.common,yard_arrival_time:'25:00'}},{common:{...valid.common,yard_arrival_date:'2026-02-31'}},{common:{...valid.common,yard_arrival_date:'',yard_arrival_time:'18:00'}},{common:{...valid.common,carrier_id:'foreign'}}]){const r=await f.req(f.base+'/visits/bulk','POST',{...valid,...changes});assert.ok([400,404].includes(r.status),JSON.stringify(r));assert.deepEqual(await f.ws(),before);assert.equal(f.db.prepare('SELECT count(*) AS n FROM visit_batches').get().n,0);}
+ assert.equal((await f.req(`/api/projects/${f.legacy.id}/visits/bulk`,'POST',valid)).status,400);
+ const result=await f.req(f.base+'/visits/bulk','POST',valid);assert.equal(result.status,201);const next=await f.req(f.base+'/visits/bulk','POST',{...valid,request_id:'another-day',common:{...valid.common,yard_arrival_date:'2026-10-21'}});assert.equal(next.status,201);assert.equal((await f.ws()).truckVisits.length,4);
+});

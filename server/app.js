@@ -30,8 +30,8 @@ export function createApp(db) {
   app.post('/api/projects', (req,res) => {
     const name = text(req.body.name,100); if (!name) fail('Project name is required.');
     const kind=req.body.project_type??'vin';if(!['vin','stripping'].includes(kind))fail('Choose a valid project type.');
-    const p = {id:randomUUID(),name,customer:text(req.body.customer ?? '',100),target:count(req.body.target ?? (kind==='stripping'?0:400),kind==='stripping'?0:1,100000),created_at:now(),project_type:kind,yard:text(req.body.yard??'',500)};
-    db.prepare('INSERT INTO projects(id,name,customer,target,created_at,project_type,yard) VALUES(?,?,?,?,?,?,?)').run(p.id,p.name,p.customer,p.target,p.created_at,p.project_type,p.yard);
+    const p = {id:randomUUID(),name,customer:text(req.body.customer ?? '',100),target:count(req.body.target ?? (kind==='stripping'?0:400),kind==='stripping'?0:1,100000),created_at:now(),project_type:kind,yard:text(req.body.yard??'',500),destination:text(req.body.destination??'',500)};
+    db.prepare('INSERT INTO projects(id,name,customer,target,created_at,project_type,yard,destination) VALUES(?,?,?,?,?,?,?,?)').run(p.id,p.name,p.customer,p.target,p.created_at,p.project_type,p.yard,p.destination);
     res.status(201).json(project(p.id));
   });
   app.patch('/api/projects/:p', (req,res) => {
@@ -39,7 +39,7 @@ export function createApp(db) {
     for(const f of ['name','customer'])if(req.body[f]!==undefined)update[f]=text(req.body[f],100);
     if(update.name==='')fail('Project name is required.');
     if(req.body.project_type!==undefined&&req.body.project_type!==p.project_type)fail('Project type is fixed after creation. Create a separate project for another workflow.');
-    if(req.body.yard!==undefined)update.yard=text(req.body.yard,500);
+    for(const f of ['yard','destination'])if(req.body[f]!==undefined)update[f]=text(req.body[f],500);
     if(req.body.target!==undefined)update.target=count(req.body.target,p.project_type==='stripping'?0:1,100000);
     if(req.body.volume_mode!==undefined){if(!['estimate','packing_list'].includes(req.body.volume_mode))fail('Choose an estimate or the packing-list total.');if(p.project_type==='stripping'&&req.body.volume_mode!=='estimate')fail('Stripping volume is tracked through visits, without a packing-list target.');update.volume_mode=req.body.volume_mode;}
     const entries=Object.entries(update);if(!entries.length)fail('No project settings to update.');
@@ -52,7 +52,7 @@ export function createApp(db) {
     const p=project(req.params.p);
     if(req.body?.confirmName!==p.name)fail('Type the current project name to confirm deletion.');
     transaction(db,()=>{
-      for(const table of ['schedule_alerts','events','carrier_updates','units','truck_visits','project_trucks','loads','packing_lists','carriers'])db.prepare(`DELETE FROM ${table} WHERE project_id=?`).run(p.id);
+      for(const table of ['visit_batches','schedule_alerts','events','carrier_updates','units','truck_visits','project_trucks','loads','packing_lists','carriers'])db.prepare(`DELETE FROM ${table} WHERE project_id=?`).run(p.id);
       db.prepare('DELETE FROM projects WHERE id=?').run(p.id);
     });res.json({deleted:p.id});
   });

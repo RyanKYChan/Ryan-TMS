@@ -1,4 +1,4 @@
-RYAN TMS v0.8.0 - Open the dashboard on your Windows computer
+RYAN TMS v0.9.0 - Open the dashboard on your Windows computer
 
 1. Install Node.js version 24 from https://nodejs.org if you do not have it.
 2. Extract the entire ZIP file to a folder on your computer.
@@ -10,6 +10,8 @@ RYAN TMS v0.8.0 - Open the dashboard on your Windows computer
 The dashboard includes:
 - Project type: VIN transport or ad hoc container stripping without VINs.
 - Carrier & truck bank: reusable carriers, trucks, trailers and drivers.
+- Saved loading/unloading yards and bulk paste of carrier truck messages.
+- Yard-arrival deadlines, calendar entries and batch announcements.
 - Truck visits: spot-market bookings, plate/driver swaps and milestones.
 - Yard calendar and copy-ready announcements, with re-announcement alerts.
 - Confirmed VINs: add and link VINs after stripping, even after pickup.
@@ -44,7 +46,7 @@ Extract this ZIP into the SAME parent folder so the Ryan-TMS folder merges
 with your existing Ryan-TMS folder. Replace application files when asked.
 DO NOT delete the old folder or its data directory first.
 This ZIP contains no data folder and does not replace your existing database.
-Start START-TMS.cmd again, refresh Edge, and check v0.8.0 in the footer.
+Start START-TMS.cmd again, refresh Edge, and check v0.9.0 in the footer.
 
 TO START AN AD HOC CONTAINER STRIPPING PROJECT
 Click New project and choose Ad hoc container stripping - truck visits.
@@ -54,6 +56,16 @@ Click New truck visit, or + on a calendar day, to plan a pickup without VINs.
 The new visit can prepare its yard announcement automatically after saving.
 Copy the table to your usual yard message; Mark as announced after sending.
 Copying alone does not mark it announced, and the app does not send messages.
+
+TO BOOK SEVERAL TRUCKS FROM A CARRIER MESSAGE
+Open Project settings and save Default pickup yard and Default unloading yard.
+Click Bulk add trucks, choose the carrier, and paste the carrier message.
+Click Read pasted trucks, check truck/trailer/driver rows, then Book 4 trucks.
+You can correct/remove rows and apply shared dates, yards and comments.
+Today till 18:00 ... arrive sets a shared yard-arrival deadline, not ETD/ETA.
+Calendar > Arrivals at loading yard shows these appointments.
+Announcements stay date-only unless you tick Include hours and minutes.
+The whole batch is validated together; retries do not create duplicate visits.
 
 TO HANDLE DRIVER SWAPS AND DROPOUTS
 Open Truck visits, then Edit / swap truck on the booking.

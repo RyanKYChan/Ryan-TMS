@@ -37,7 +37,7 @@ Install Node.js 24 from https://nodejs.org/en/download, extract the archive, and
 
 **Updating:** Close the old app first. Back up its `data` folder. Extract into the same parent folder so the new `Ryan-TMS` folder merges with the existing folder, replacing application files. Do not delete the old folder or its `data` directory. The ZIP contains no databases. Restart the launcher and check v{version} in the footer.
 
-This update adds ad hoc container-stripping projects without prior VINs: carrier/truck/driver bank, truck visit bookings, ETD/ETA calendar and ATD/ATA, copy-ready yard announcements, plate/driver swaps with re-announcement flags and history, and VINs attached after stripping. Existing vehicle projects and their records are preserved. Existing data is retained when updating as described above.
+This update saves default loading/unloading yards per stripping project and adds bulk truck bookings from carrier messages. Review truck/trailer/driver rows, apply shared yards and dates, then book the batch together. Clear arrival instructions fill a separate yard-arrival deadline, visible in the calendar and announcements. Dates remain date-only in announcements unless hours are enabled. Invalid batches roll back completely and retries do not duplicate visits. Existing vehicle projects and their records are preserved. Existing data is retained when updating as described above.
 
 SHA-256: `{digest}`
 ''')
