@@ -1,4 +1,4 @@
-RYAN TMS v0.9.0 - Open the dashboard on your Windows computer
+RYAN TMS v0.10.0 - Open the dashboard on your Windows computer
 
 1. Install Node.js version 24 from https://nodejs.org if you do not have it.
 2. Extract the entire ZIP file to a folder on your computer.
@@ -35,18 +35,52 @@ The dashboard includes:
 - Generic imports: VIN No, Model, Loading and Unloading are recognised.
 - Rows per page: show 50, 100, 200, 400, or all VINs.
 - Select next: choose a batch of VINs in original packing-list order.
-- Assign to carrier: allocate 200 VINs or any selected batch at once.
+- Assign / change carrier: allocate 200 VINs or any selected batch at once.
 - Carriers: a separate workspace for each carrier and a progress comparison.
 - Paste sheet update: preview changed milestones and gap-based load builds.
 
-UPDATING A PREVIOUS INSTALLATION
-Close the app's command window before updating.
-Make a backup copy of your existing data folder.
-Extract this ZIP into the SAME parent folder so the Ryan-TMS folder merges
-with your existing Ryan-TMS folder. Replace application files when asked.
-DO NOT delete the old folder or its data directory first.
-This ZIP contains no data folder and does not replace your existing database.
-Start START-TMS.cmd again, refresh Edge, and check v0.9.0 in the footer.
+UPDATING / FIRST-TIME DATABASE IMPORT
+1. Close all previous Ryan-TMS command windows.
+2. Extract the new ZIP anywhere and run START-TMS.cmd.
+3. On first launch, choose Import Existing Database and select the most recent
+   previous Ryan-TMS folder. You can also paste its path.
+4. Confirm the previous application is closed, then Inspect existing database.
+5. Check the source path and record counts, then Confirm import.
+   Keep the old data folder intact, including WAL and SHM files. Do not copy only
+   tms.sqlite. SQLite safely includes committed WAL changes during import.
+   Original database files are never deleted.
+6. Data is now stored at %LOCALAPPDATA%\Ryan-TMS\data\tms.sqlite.
+   Every later update opens it automatically, wherever the new ZIP is extracted.
+   Never run two versions at once. Do not point older releases at this database.
+7. For a new installation without existing data, expand Start without an existing
+   database and type NEW. Do not do this if you have records to import.
+
+BACKUP / RESTORE
+Open Data & backups in the sidebar to see the active database location.
+Create & download database backup lets you choose where to save a complete copy.
+Backups include every project, VIN, carrier, load, movement, setting and history.
+To restore: select a Ryan-TMS backup, review its counts, type RESTORE and confirm.
+Current data is backed up before restoration. A bad backup is rejected.
+Automatic backups are also created before numbered schema upgrades.
+If the database cannot be accessed, startup fails instead of resetting your data.
+A missing expected database must be restored; do not create an empty replacement.
+
+BULK CARRIER REASSIGNMENT
+In Unit register, filter the old carrier and select the VINs to move.
+Untick Without a carrier only to use Select next for already assigned VINs.
+Select all matching vehicles includes VINs across all pages.
+Choose Assign / change carrier, select the new carrier, Review assignments,
+then Confirm assignment. Review shows all old/new carriers and load removals.
+Previous planned load links and trucks are cleared for transferred VINs.
+Routes, dates, notes, packing lists, order and history are retained.
+Departed/delivered vehicles and VINs linked to truck visits are protected.
+
+For carrier sheets, open the destination carrier (even if it has no VINs yet),
+paste the new batch, and Review changes. Tick Confirm assignment changes for
+all VINs and apply once. Carrier moves and sheet updates save together.
+Blank dates keep saved dates. New sheet truck details replace old ones;
+otherwise the previous carrier's truck is cleared. Omitted VINs stay unchanged.
+If a pasted Carrier column is present, it must match the destination carrier.
 
 TO START AN AD HOC CONTAINER STRIPPING PROJECT
 Click New project and choose Ad hoc container stripping - truck visits.
@@ -138,7 +172,7 @@ Mark followed up after checking with the carrier. History remains available.
 
 TO ASSIGN YOUR FIRST 200 VINS
 Open Unit register. Enter 200 under Select next, then Select 200 VINs.
-Click Assign to carrier, enter the carrier name, and Assign 200 vehicles.
+Click Assign / change carrier, enter the name, Review assignments, then confirm.
 Repeat for the next carrier: allocated VINs are skipped by default.
 Open Load builds, click the carrier, then Paste full batch for that carrier.
 Paste the entire sheet, including headers, load gaps and unassigned VINs.
@@ -150,8 +184,8 @@ Turn off membership sync for a dates-only or partial paste.
 To repair an earlier packing list import, re-paste it with the same name.
 Matching VINs update in place; you do not need to recreate the vehicles.
 
-Your real Maxus project starts empty, with a planning target of 400 units.
-Your data saves to data/tms.sqlite in this extracted folder.
+If you explicitly create a new database, its Maxus project starts empty with a planning target of 400 units.
+Your data saves to %LOCALAPPDATA%\Ryan-TMS\data\tms.sqlite, outside this folder.
 The download includes no real vehicle records or cloud workspace database.
 
 ChatGPT's cloud environment settings page does not display this web app.

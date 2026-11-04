@@ -79,7 +79,7 @@ test('Visit exports are scoped, escape spreadsheet formulas, and project deletio
  assert.equal((await f.req(f.base,'DELETE',{confirmName:f.p.name})).status,200);for(const table of ['truck_visits','project_trucks','units','events','carriers'])assert.equal(f.db.prepare(`SELECT count(*) AS n FROM ${table} WHERE project_id=?`).get(f.p.id).n,0,table);assert.equal((await f.req(`/api/projects/${f.legacy.id}/workspace`)).status,200);
 });
 test('Truck bank, bookings and announcement state persist across database reopen',async t=>{
- const dir=mkdtempSync(join(tmpdir(),'tms-yard-')),file=join(dir,'tms.sqlite');t.after(()=>rmSync(dir,{recursive:true,force:true}));const f=await fixture(t,file),{data:v}=await f.create();await f.req(f.base+'/visits/announce','POST',{visits:[{id:v.id,signature:v.announcement_signature}]});const db=openDb(file);try{assert.equal(db.prepare('SELECT count(*) AS n FROM truck_visits').get().n,1);assert.equal(db.prepare('SELECT status FROM truck_visits WHERE id=?').get(v.id).status,'announced');assert.equal(db.prepare('SELECT count(*) AS n FROM project_trucks').get().n,1);}finally{db.close();}
+ const dir=mkdtempSync(join(tmpdir(),'tms-yard-')),file=join(dir,'tms.sqlite');t.after(()=>rmSync(dir,{recursive:true,force:true}));const f=await fixture(t,file),{data:v}=await f.create();await f.req(f.base+'/visits/announce','POST',{visits:[{id:v.id,signature:v.announcement_signature}]});f.db.close();const db=openDb(file);try{assert.equal(db.prepare('SELECT count(*) AS n FROM truck_visits').get().n,1);assert.equal(db.prepare('SELECT status FROM truck_visits WHERE id=?').get(v.id).status,'announced');assert.equal(db.prepare('SELECT count(*) AS n FROM project_trucks').get().n,1);}finally{db.close();}
 });
 
 

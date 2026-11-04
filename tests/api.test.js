@@ -143,8 +143,9 @@ test('Carrier sheets create gap loads, reuse them on repeated pastes, preserve b
 });
 test('Carrier update validation is atomic, isolates carriers, and rejects stale previews',async t=>{
   const f=await carrierFixture(t);const w=await f.workspace();const {data:b}=await f.request(`/api/projects/${f.p}/carriers`,'POST',{name:'Carrier B'});
-  await f.request(`/api/projects/${f.p}/carriers/${b.id}/assign`,'POST',{unitIds:[w.units[3].id]});
-  for(const rows of [[{vin:vin(1),notes:'Changed'},{vin:vin(4)}],[{vin:vin(1)},{vin:vin(99)}],[{vin:vin(1)},{vin:vin(1)}],[{vin:vin(1),carrier:'Carrier B'}],[{vin:vin(1),atd:'2026-10-13T08:00:00Z',ata:'2026-10-12T08:00:00Z'}]]){
+  const transfer={unitIds:[w.units[3].id]},transferPath=`/api/projects/${f.p}/carriers/${b.id}/assign`;const assignment=await f.request(transferPath+'/preview','POST',transfer);
+  await f.request(transferPath,'POST',{...transfer,snapshot:assignment.data.snapshot,confirmCarrierChanges:true});
+  for(const rows of [[{vin:vin(1)},{vin:vin(99)}],[{vin:vin(1)},{vin:vin(1)}],[{vin:vin(1),carrier:'Carrier B'}],[{vin:vin(1),atd:'2026-10-13T08:00:00Z',ata:'2026-10-12T08:00:00Z'}]]){
     const r=await f.preview({groupLoads:false,rows});assert.equal(r.status,400);assert.equal((await f.workspace()).units[0].notes,'Keep note');assert.equal((await f.workspace()).carrierUpdates.length,0);
   }
   const body={groupLoads:false,rows:[{vin:vin(1),notes:'Sheet update'}]},review=await f.preview(body);
@@ -161,7 +162,7 @@ test('Changing blank-row groups repartitions planned loads but never moves depar
   const regroup={groupLoads:true,rows:[1,2,3,4].map(i=>({vin:vin(i),group:i%2?'0':'1'}))};
   assert.equal((await f.preview(regroup)).status,400);w=await f.workspace();assert.deepEqual(w.units.map(u=>u.load_id),ids);
   assert.equal((await f.apply({...regroup,groupLoads:false})).status,200);assert.deepEqual((await f.workspace()).units.map(u=>u.load_id),ids);
-  const {data:b}=await f.request(`/api/projects/${f.p}/carriers`,'POST',{name:'Carrier B'});assert.equal((await f.request(`/api/projects/${f.p}/carriers/${b.id}/assign`,'POST',{unitIds:[w.units[1].id]})).status,400);
+  const {data:b}=await f.request(`/api/projects/${f.p}/carriers`,'POST',{name:'Carrier B'});assert.equal((await f.request(`/api/projects/${f.p}/carriers/${b.id}/assign`,'POST',{unitIds:[w.units[1].id]})).status,409);
 });
 test('Explicit carrier load references enforce capacity and carrier ownership',async t=>{
   const f=await carrierFixture(t);
@@ -306,4 +307,34 @@ test('Deleting the last project leaves an empty workspace across database restar
   db=openDb(filename);assert.equal(db.prepare('SELECT count(*) AS n FROM projects').get().n,0);
   server=createApp(db).listen(0,'127.0.0.1');await new Promise(r=>server.once('listening',r));
   try{const r=await fetch(`http://127.0.0.1:${server.address().port}/api/projects`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:'New project after deletion',target:250})});assert.equal(r.status,201);assert.equal((await r.json()).target,250);}finally{await new Promise(r=>server.close(r));db.close();}
+});
+
+test('Bulk carrier reassignment reviews 400 VINs, detaches selected planned loads, preserves data and rejects stale or protected batches atomically',async t=>{
+  const f=await carrierFixture(t,400),initial=await f.workspace();
+  const {data:b}=await f.request(`/api/projects/${f.p}/carriers`,'POST',{name:'Better Carrier'});
+  const {data:l}=await f.request(`/api/projects/${f.p}/loads`,'POST',{reference:'Original plan',carrier:'Carrier A',truck:'OLD-TRUCK',etd:'2026-10-12T08:00:00Z',capacity:500});
+  await f.request(`/api/projects/${f.p}/loads/${l.id}/assign`,'POST',{unitIds:initial.units.map(u=>u.id)});
+  const path=`/api/projects/${f.p}/carriers/${b.id}/assign`,body={unitIds:initial.units.slice(0,200).map(u=>u.id)};
+  assert.equal((await f.request(path,'POST',body)).status,409);
+  const review=await f.request(path+'/preview','POST',body);assert.equal(review.data.assigned,200);assert.equal(review.data.rows[0].load,'Original plan');
+  assert.equal((await f.request(path,'POST',{...body,snapshot:review.data.snapshot,confirmCarrierChanges:true})).status,200);
+  let w=await f.workspace();assert.ok(w.units.slice(0,200).every(u=>u.carrier==='Better Carrier'&&!u.load_id&&!u.truck&&u.etd==='2026-10-12T08:00:00Z'&&u.notes==='Keep note'&&u.packing_list==='PL-001'));assert.ok(w.units.slice(200).every(u=>u.carrier==='Carrier A'&&u.load_id===l.id));assert.ok(w.events.some(e=>e.description.includes('Carrier A → Better Carrier')));
+  const remaining={unitIds:initial.units.slice(200).map(u=>u.id)},stale=await f.request(path+'/preview','POST',remaining);
+  await f.request(`/api/projects/${f.p}/units/${initial.units[200].id}`,'PATCH',{notes:'Newer note'});
+  assert.equal((await f.request(path,'POST',{...remaining,snapshot:stale.data.snapshot,confirmCarrierChanges:true})).status,409);
+  await f.request(`/api/projects/${f.p}/units/${initial.units[399].id}`,'PATCH',{atd:'2026-10-12T09:00:00Z'});
+  assert.equal((await f.request(path+'/preview','POST',remaining)).status,400);w=await f.workspace();assert.ok(w.units.slice(200).every(u=>u.carrier==='Carrier A'));
+});
+test('A pasted sheet previews all carrier changes, requires confirmation, applies membership and fields together and protects departed VINs',async t=>{
+  const f=await carrierFixture(t),{data:b}=await f.request(`/api/projects/${f.p}/carriers`,'POST',{name:'Carrier B'});
+  await f.apply({groupLoads:true,rows:[1,2,3,4].map(i=>({vin:vin(i),load_reference:'Old load',truck:'OLD'}))});
+  const path=`/api/projects/${f.p}/carriers/${b.id}/updates`,body={groupLoads:true,rows:[{vin:vin(1),load_reference:'New load',truck:'NEW',etd:'2026-10-13T10:00:00Z'},{vin:vin(2),load_action:'pool'}]};
+  const preview=await f.request(path+'/preview','POST',body);assert.equal(preview.status,200);assert.equal(preview.data.carrierChanges.length,2);assert.equal(preview.data.carrierChanges[0].before,'Carrier A');
+  assert.equal((await f.request(path,'POST',{...body,snapshot:preview.data.snapshot})).status,409);
+  assert.equal((await f.workspace()).units[0].carrier,'Carrier A');
+  assert.equal((await f.request(path,'POST',{...body,snapshot:preview.data.snapshot,confirmCarrierChanges:true})).status,200);
+  const w=await f.workspace();assert.equal(w.units[0].carrier,'Carrier B');assert.equal(w.units[0].load_ref,'New load');assert.equal(w.units[0].truck,'NEW');assert.equal(w.units[1].carrier,'Carrier B');assert.equal(w.units[1].load_id,null);assert.equal(w.units[1].truck,'');assert.equal(w.units[2].load_ref,'Old load');assert.equal(w.units[2].carrier,'Carrier A');assert.equal(w.units[0].notes,'Keep note');
+  await f.request(`/api/projects/${f.p}/units/${w.units[2].id}`,'PATCH',{atd:'2026-10-13T10:00:00Z'});
+  assert.equal((await f.request(path+'/preview','POST',{groupLoads:false,rows:[{vin:vin(3)}]})).status,400);
+  const repeat=await f.request(path+'/preview','POST',body);assert.equal(repeat.data.carrierChanges.length,0);assert.equal(repeat.data.counts.changed,0);
 });

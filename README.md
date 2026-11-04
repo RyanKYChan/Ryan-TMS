@@ -4,19 +4,29 @@ A mini TMS for vehicle spot transport and shunting, starting with a Maxus projec
 
 ## Open it on your Windows computer
 
-[Download the v0.9.0 Windows ZIP](https://github.com/RyanKYChan/Ryan-TMS/raw/refs/heads/main/downloads/ryan-tms-windows-v0.9.0.zip)
+[Download the v0.10.0 Windows ZIP](https://github.com/RyanKYChan/Ryan-TMS/raw/refs/heads/main/downloads/ryan-tms-windows-v0.10.0.zip)
 
 ChatGPT's cloud environment page does not expose the web app. The server must run on your own computer, or the app needs a separate hosted deployment. Opening the HTML files directly does not start the API.
 
-Install Node.js 24, extract the downloadable app ZIP, and double-click `START-TMS.cmd` in the extracted folder. It installs dependencies on first use and starts the built app. Edge opens after a successful readiness check. Keep the command window open while using the app. See `OPEN-ME.txt` for step-by-step instructions. The ZIP excludes workspace databases and starts with an empty real project.
+Install Node.js 24, extract the downloadable app ZIP, and double-click `START-TMS.cmd` in the extracted folder. It installs dependencies on first use and starts the built app. Edge opens after a successful readiness check. Keep the command window open while using the app. See `OPEN-ME.txt` for step-by-step instructions. The ZIP excludes operational databases. First launch offers an import or an explicit new-database choice.
 
 The launcher can also be run using `npm run open` after dependencies and the production build are present. Browser launch is Windows-specific; other systems display a local address. The dashboard, import, and tracking logic are the same as the workspace version.
 
-## Update an existing Windows installation
+## Update and migrate once (v0.10.0)
 
-Close the app's command window first. Make a backup copy of your existing `data` folder. Extract the new ZIP into the same parent folder so its `Ryan-TMS` folder merges with your current `Ryan-TMS` folder; replace application files when prompted. **Do not delete the old folder or its `data` directory.** The ZIP contains no database or `data` folder, so merging it does not replace your existing packing lists. Start `START-TMS.cmd` again and refresh Edge. Version 0.9.0 appears in the footer. Existing packing lists, notes, dates, and load assignments are retained; the database gains saved unloading-yard defaults, yard-arrival deadlines and bulk truck bookings automatically. Existing visits, truck details and announcements stay saved. Existing projects remain vehicle/VIN projects. Existing unit prices remain unit costs.
+Close every previous Ryan-TMS command window. Extract this ZIP anywhere, including a new Downloads folder, and run `START-TMS.cmd`. Operational data now lives at **`%LOCALAPPDATA%\Ryan-TMS\data\tms.sqlite`**, independently of the app folder.
 
-You can re-paste an existing packing list with its original name to fill previously missed columns. Matching VINs update in place rather than creating duplicates.
+On the first launch, choose **Import Existing Database**, select your most recent previous Ryan-TMS folder (or enter its path), and confirm the old app is closed. If that folder already contains `data/tms.sqlite`, its path is suggested. Click **Inspect existing database**, check the source path and record counts, then **Confirm import**. Keep the entire old data folder intact, including WAL/SHM files: SQLite snapshots include committed WAL transactions; copying only the main SQLite file may miss records. Originals are never deleted. The ZIP does not contain your local operational database.
+
+For a genuinely new installation only, expand **Start without an existing database** and type NEW. The app never chooses a new empty database on your behalf. If a previously initialized database is missing, corrupt, locked or incompatible, startup stops with an error rather than resetting it.
+
+For every later update: close the app, download/extract anywhere, launch. The same persistent database opens automatically. Do not run an old release against the shared database: releases before v0.10.0 use their own legacy app-folder databases and cannot understand the new storage safeguards. Database schema versions prevent this and later releases from opening a newer incompatible schema; a process lock prevents simultaneous supported instances. An unclean exit is recovered automatically when its lock owner no longer exists.
+
+## Bulk VIN / carrier changes (v0.10.0)
+
+In **Unit register**, filter the source carrier, untick **Without a carrier only** when using **Select next**, and select VINs or **Select all matching vehicles** across pages. Choose **Assign / change carrier**, choose the new carrier, **Review assignments**, then **Confirm assignment**. The review lists each old/new carrier and any old load. Changing carrier detaches selected VINs from their previous planned load and clears its truck plate. Routes, dates, notes, packing-list membership, ordering and history stay saved; other VINs on the load stay put. Departed/delivered VINs and VINs linked to truck visits are protected.
+
+Alternatively, paste the new full batch in the destination carrier’s **Paste sheet update** or **Load builds** workspace, including a carrier that has no VINs yet. **Review changes** lists detected carrier transfers. Tick **Confirm assignment changes for all … VINs**, then apply the update once. Carrier transfers, planned load membership and sheet fields are saved together or all rolled back. Blank sheet dates preserve existing dates; an old carrier’s truck is cleared unless the new sheet supplies one. Omitted VINs stay unchanged. A pasted Carrier column must match the destination workspace. Saved-data changes after review require a fresh review.
 
 ## Start the app
 
@@ -88,7 +98,7 @@ Use **Explore a sample project** to try the flow before real data arrives. Sampl
 
 1. Open **Unit register**. Optionally filter to a particular packing list. **Rows per page** offers 50, 100, 200, 400, or **All vehicles**; the default is 200.
 2. Enter **200** in **Select next** and click **Select 200 VINs**. The selection follows the original packing-list import order, across pages. Re-importing a sheet does not reorder existing VINs. For older databases, original insertion order is restored automatically.
-3. Click **Assign to carrier**. Enter a new carrier name or choose an existing carrier, then click **Assign 200 vehicles**.
+3. Click **Assign / change carrier**. Enter a new carrier name or choose an existing carrier, then **Review assignments** and **Confirm assignment**.
 4. Repeat for the next batch. **Without a carrier only** is enabled by default, so the first carrier's VINs are skipped. Already selected VINs are also skipped when adding another batch. You can select individual checkboxes or select all matching vehicles instead.
 
 Carrier allocation does not create a load or mark vehicles as planned. Vehicles on an existing load retain its carrier unless you change the load's carrier, or remove planned vehicles from that load first. VINs, packing lists, route details, notes, and milestones remain in place.
@@ -190,15 +200,20 @@ Dates accept `YYYY-MM-DD`, `DD/MM/YYYY` (default), or `MM/DD/YYYY` when selected
 
 ## Storage and backups
 
-SQLite stores data on the server in `data/tms.sqlite`, independent of browser storage. Reloading the browser or restarting the server retains projects and units. There are no invented real vehicle records and no required credentials.
+**Data & backups** is available in the sidebar even when there are no projects. It shows the active database location and provides **Create & download database backup**. Edge’s save picker lets you choose any destination; browsers without that API use their normal download settings. A consistent safety copy is also kept in the database’s `backups` folder.
+
+To restore, select a complete backup made by Ryan-TMS, review its counts and filename, type **RESTORE** and confirm. This replaces all projects, not just the selected project. A consistent backup of the current database is created first. The incoming copy is integrity checked and upgraded before switching; failed validation leaves the active database unchanged. Restoring also reloads the app. Exported CSV files are not complete database backups.
+
+Every schema upgrade uses a numbered `PRAGMA user_version`, takes a consistent SQLite snapshot before DDL, and applies schema changes in a transaction. Database integrity and foreign-key links are checked. Backups use SQLite `VACUUM INTO` (application and migrations) or the SQLite backup API (CLI); both include committed WAL transactions.
 
 ```sh
-npm run backup
+npm run backup                      # automatic backup folder
+npm run backup -- /path/copy.sqlite  # choose a new destination filename
 ```
 
-This creates a consistent SQLite backup under `data/backups/`, even while the app is running. Keep backups or CSV exports somewhere durable before deleting or replacing the workspace. `data/`, backups, local tooling caches, and generated outputs are ignored by Git.
+Windows defaults to `%LOCALAPPDATA%\Ryan-TMS\data\tms.sqlite`. Linux/macOS use `$XDG_DATA_HOME/Ryan-TMS/data/tms.sqlite` or `~/.local/share/Ryan-TMS/data/tms.sqlite`. These defaults do not depend on the extraction directory or shell working directory. Optional `TMS_DB_PATH` deliberately selects a different database for tests/custom installations; relative overrides resolve against the app root. The server, launcher and CLI backup resolve paths identically. `PORT` defaults to 3000 and `HOST` to 127.0.0.1. No services or credentials are needed at runtime.
 
-Optional runtime overrides: `PORT` (default 3000), `HOST` (default 127.0.0.1), `TMS_DB_PATH` (default `data/tms.sqlite`). They are not required to run the workspace version. This first version has no login/access control and is intended for this workspace. Shared hosting will need authentication, deployment, and a deliberate durable-storage setup. Google Sheets input is manual copy/paste; automatic synchronisation is not implemented.
+This remains a local single-user app. Keep the server bound to loopback. Automatic Google Sheets synchronisation and shared-host authentication are not implemented.
 
 ## Validation
 

@@ -15,10 +15,10 @@ test('Carrier Markdown and VIN-only sheets retain groups; load references fill d
   const preview=previewCarrierRows(grid,grid.mapping,units,'Carrier A','dmy',true);assert.deepEqual(preview.map(r=>r.unit.load_reference),['Truck A','Truck A','Truck B']);
   grid=inspectCarrierGrid(`${vin(1)}\n\n${vin(2)}\n${vin(3)}`);assert.deepEqual(grid.mapping,['vin']);assert.deepEqual(grid.groups,['0','1','1']);
 });
-test('Carrier preview flags unknown or differently assigned VINs while normalising dates and retaining blanks',()=>{
+test('Carrier preview accepts differently assigned VINs for server review and rejects unknown VINs',()=>{
   const grid=inspectCarrierGrid(`VIN\tETD\tATA\n${vin(1)}\t\t13/10/2026\n${vin(2)}\t\t\n${vin(4)}\t\t`);
   const preview=previewCarrierRows(grid,grid.mapping,[{...units[0],etd:'2026-10-12T06:00:00Z'},{...units[1],carrier:'Carrier B'}],'Carrier A');
-  assert.equal(preview[0].unit.etd,undefined);assert.equal(preview[0].errors.length,0);assert.match(preview[1].errors.join(' '),/Not assigned/);assert.match(preview[2].errors.join(' '),/Not in the packing list/);
+  assert.equal(preview[0].unit.etd,undefined);assert.equal(preview[0].errors.length,0);assert.equal(preview[1].errors.length,0);assert.match(preview[2].errors.join(' '),/Not in the packing list/);
 });
 
 test('A full 200-VIN sheet detects twelve six-unit loads and keeps the unbroken 128-VIN remainder unbuilt',()=>{

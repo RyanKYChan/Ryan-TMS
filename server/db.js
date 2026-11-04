@@ -1,13 +1,31 @@
 import { DatabaseSync } from 'node:sqlite';
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, existsSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { FIELDS } from './domain.js';
-export function openDb(filename) {
-  if (filename !== ':memory:') mkdirSync(dirname(filename), { recursive: true });
-  const db = new DatabaseSync(filename);
-  const newDatabase=!db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='projects'").get();
-  db.exec(`PRAGMA foreign_keys = ON; PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 5000;
+import { acquireDatabaseLock, validateDatabase, safetyBackup, SCHEMA_VERSION } from './database-safety.js';
+export function openDb(filename,{lock=true}={}) {
+  const persisted=filename!==':memory:',existed=persisted&&existsSync(filename);
+  const release=persisted&&lock?acquireDatabaseLock(filename):()=>{};
+  let db;
+  try{
+    if(persisted)mkdirSync(dirname(filename),{recursive:true});
+    db=new DatabaseSync(filename);
+    validateDatabase(db,{allowEmpty:!existed});
+    const version=db.prepare('PRAGMA user_version').get().user_version;
+    const newDatabase=!db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='projects'").get();
+    if(version<SCHEMA_VERSION){
+      if(existed)safetyBackup(db,filename,'before-schema-'+SCHEMA_VERSION);
+      db.exec('PRAGMA foreign_keys=ON; PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000;');
+      transaction(db,()=>{initializeSchema(db,newDatabase);db.exec(`PRAGMA user_version=${SCHEMA_VERSION}`);validateDatabase(db);});
+    }else db.exec('PRAGMA foreign_keys=ON; PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000;');
+    const close=db.close.bind(db);let closed=false;
+    db.close=()=>{if(closed)return;close();closed=true;release();};
+    return db;
+  }catch(e){try{db?.close();}finally{release();}throw e;}
+}
+function initializeSchema(db,newDatabase){
+  db.exec(`
     CREATE TABLE IF NOT EXISTS projects (
       id TEXT PRIMARY KEY, name TEXT NOT NULL, customer TEXT NOT NULL DEFAULT '',
       target INTEGER NOT NULL DEFAULT 400, created_at TEXT NOT NULL
@@ -66,27 +84,24 @@ export function openDb(filename) {
     );
     CREATE INDEX IF NOT EXISTS visits_schedule ON truck_visits(project_id,pickup_date,status);
     CREATE INDEX IF NOT EXISTS alerts_project ON schedule_alerts(project_id,resolved_at);`);
-  transaction(db,()=>{
+  {
     const additions={truck_visits:{yard_arrival_date:"TEXT NOT NULL DEFAULT ''",yard_arrival_time:"TEXT NOT NULL DEFAULT ''",destination:"TEXT NOT NULL DEFAULT ''",etd:"TEXT NOT NULL DEFAULT ''",eta:"TEXT NOT NULL DEFAULT ''",atd:"TEXT NOT NULL DEFAULT ''",ata:"TEXT NOT NULL DEFAULT ''",time_zone:"TEXT NOT NULL DEFAULT 'Europe/Amsterdam'"},events:{truck_visit_id:'TEXT REFERENCES truck_visits(id)'},carriers:{contact_name:"TEXT NOT NULL DEFAULT ''",contact_phone:"TEXT NOT NULL DEFAULT ''",contact_email:"TEXT NOT NULL DEFAULT ''",notes:"TEXT NOT NULL DEFAULT ''"},units:{truck_visit_id:'TEXT REFERENCES truck_visits(id)',revenue:"TEXT NOT NULL DEFAULT ''"},loads:{cost:"TEXT NOT NULL DEFAULT ''",revenue:"TEXT NOT NULL DEFAULT ''"},projects:{destination:"TEXT NOT NULL DEFAULT ''",project_type:"TEXT NOT NULL DEFAULT 'vin'",yard:"TEXT NOT NULL DEFAULT ''",volume_mode:"TEXT NOT NULL DEFAULT 'estimate'",cost_basis:"TEXT NOT NULL DEFAULT 'unit'",revenue_basis:"TEXT NOT NULL DEFAULT 'unit'",unit_cost:"TEXT NOT NULL DEFAULT ''",load_cost:"TEXT NOT NULL DEFAULT ''",unit_revenue:"TEXT NOT NULL DEFAULT ''",load_revenue:"TEXT NOT NULL DEFAULT ''"}};
     for(const [table,fields] of Object.entries(additions)){
       const known=new Set(db.prepare(`PRAGMA table_info(${table})`).all().map(c=>c.name));
       for(const [field,type] of Object.entries(fields))if(!known.has(field))db.exec(`ALTER TABLE ${table} ADD COLUMN ${field} ${type}`);
     }
-  });
+  }
   // Preserve the insertion order of older packing lists when upgrading an existing database.
   if (!db.prepare('PRAGMA table_info(units)').all().some(c=>c.name==='import_order')) {
-    transaction(db,()=>{
       db.exec('ALTER TABLE units ADD COLUMN import_order INTEGER NOT NULL DEFAULT 0');
       db.exec('UPDATE units SET import_order=rowid');
-    });
   }
   const existingNames=db.prepare("SELECT project_id,carrier AS name FROM units WHERE trim(carrier)<>'' UNION SELECT project_id,carrier AS name FROM loads WHERE trim(carrier)<>''").all();
-  transaction(db,()=>{for(const c of existingNames) db.prepare('INSERT OR IGNORE INTO carriers(id,project_id,name,created_at) VALUES(?,?,?,?)').run(randomUUID(),c.project_id,c.name.trim(),new Date().toISOString());});
+  for(const c of existingNames) db.prepare('INSERT OR IGNORE INTO carriers(id,project_id,name,created_at) VALUES(?,?,?,?)').run(randomUUID(),c.project_id,c.name.trim(),new Date().toISOString());
   if (newDatabase && !db.prepare('SELECT id FROM projects LIMIT 1').get()) {
     db.prepare('INSERT INTO projects(id,name,customer,target,created_at) VALUES(?,?,?,?,?)')
       .run(randomUUID(), 'Maxus spot operations', 'MAXUS', 400, new Date().toISOString());
   }
-  return db;
 }
 export function transaction(db, fn) {
   db.exec('BEGIN IMMEDIATE');

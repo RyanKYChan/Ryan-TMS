@@ -22,7 +22,7 @@ export function previewCarrierRows(grid,mapping,units,carrier,order='dmy',groupL
   const base=preview.map((r,i)=>{
     const old=units.find(u=>u.vin===r.unit.vin),errors=[...r.errors];
     if(!old)errors.push('Not in the packing list. Import this VIN first.');
-    else if(String(old.carrier).toLowerCase()!==carrier.toLowerCase())errors.push(`Not assigned to ${carrier}. Assign it from the unit register first.`);
+
     if(r.unit.carrier&&r.unit.carrier.toLowerCase()!==carrier.toLowerCase())errors.push('The pasted carrier does not match this workspace.');
     const group=grid.groups[i];
     if(group!==previousGroup){lastReference='';previousGroup=group;}

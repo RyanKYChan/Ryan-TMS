@@ -107,3 +107,5 @@
 .bulk-truck-table input {min-width:150px;width:100%}
 .bulk-truck-table td {padding:8px}
 .calendar-event.yard {border-left-color:#9d6c22;background:#fff5de;color:#71511d}
+
+.data-setup{max-width:850px;margin:40px auto;padding:24px}.data-setup input[readonly]{overflow:auto}.sidebar-bottom>.secondary{margin-bottom:12px;width:100%}

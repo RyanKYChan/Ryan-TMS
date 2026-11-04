@@ -7,11 +7,12 @@ import { api, Badge, Field, Modal, formatDate, timezone } from './shared';
 import type { Carrier, Stage, Unit } from './types';
 
 type Change={field:string;before:string;after:string};
-type Review={risks:{field:string;before:string;after:string;vin:string;unit_id:string;load_reference:string;carrier:string;deltaMinutes:number}[];snapshot:string;rows:{vin:string;unit:Unit;notice:string;classification:'load'|'pool';changes:Change[];beforeStatus:Stage;afterStatus:Stage;loadBefore:string;loadAfter:string}[];groups:{reference:string;new:boolean;unitCount:number;vins:string[]}[];counts:{matched:number;changed:number;unchanged:number;loadsCreated:number;loadMoves:number;loadsReleased:number;built:number;pool:number}};
+type Review={carrierChanges:{vin:string;before:string;after:string;load:string;truck:string}[];risks:{field:string;before:string;after:string;vin:string;unit_id:string;load_reference:string;carrier:string;deltaMinutes:number}[];snapshot:string;rows:{vin:string;unit:Unit;notice:string;classification:'load'|'pool';changes:Change[];beforeStatus:Stage;afterStatus:Stage;loadBefore:string;loadAfter:string}[];groups:{reference:string;new:boolean;unitCount:number;vins:string[]}[];counts:{matched:number;changed:number;unchanged:number;loadsCreated:number;loadMoves:number;loadsReleased:number;built:number;pool:number}};
 const label=(f:string)=>f==='load'?'Load':columns.find(([field])=>field===f)?.[1]||f;
 const display=(f:string,v:string)=>v?['etd','eta','atd','ata'].includes(f)?formatDate(v,true):v:'blank';
 
 export default function CarrierUpdateDialog({projectId,carrier,units,onClose,onDone}:{projectId:string;carrier:Carrier;units:Unit[];onClose:()=>void;onDone:(message:string)=>Promise<void>}){
+  const [confirmed,setConfirmed]=useState(false);
   const [raw,setRaw]=useState(''),[headerMode,setHeaderMode]=useState('auto'),[order,setOrder]=useState('dmy'),[groupLoads,setGroupLoads]=useState(true),[overrides,setOverrides]=useState<Record<number,string>>({}),[sectionOverrides,setSectionOverrides]=useState<Record<string,'load'|'pool'>>({}),[changesOnly,setChangesOnly]=useState(false);
   const [review,setReview]=useState<Review|null>(null),[payload,setPayload]=useState<unknown>(null),[busy,setBusy]=useState(false),[error,setError]=useState('');
   const bodyRef=useRef<HTMLDivElement>(null);
@@ -28,12 +29,12 @@ export default function CarrierUpdateDialog({projectId,carrier,units,onClose,onD
     setBusy(true);setError('');try{
       const body={rows:preview.map(r=>r.unit),groupLoads};
       const result=await api<Review>(`/api/projects/${projectId}/carriers/${carrier.id}/updates/preview`,'POST',body);
-      setPayload(body);setReview(result);
+      setPayload(body);setReview(result);setConfirmed(false);
     }catch(e){setError((e as Error).message);}finally{setBusy(false);}
   }
   async function apply(){
     setBusy(true);setError('');try{
-      const r=await api<Review['counts']>(`/api/projects/${projectId}/carriers/${carrier.id}/updates`,'POST',{...(payload as object),snapshot:review!.snapshot});
+      const r=await api<Review['counts']>(`/api/projects/${projectId}/carriers/${carrier.id}/updates`,'POST',{...(payload as object),snapshot:review!.snapshot,confirmCarrierChanges:confirmed});
       await onDone(`${carrier.name}: ${r.changed} changed · ${r.unchanged} unchanged · ${r.loadsCreated} loads created`);onClose();
     }catch(e){setError((e as Error).message);}finally{setBusy(false);}
   }
@@ -55,6 +56,7 @@ export default function CarrierUpdateDialog({projectId,carrier,units,onClose,onD
         {(inspected.error||invalid.length>0)&&<div className="error" role="alert">{inspected.error||`Fix ${invalid.length} row(s) before continuing. ${invalid.slice(0,3).map(r=>`${r.unit.vin}: ${r.errors.join(' ')}`).join(' ')}`}</div>}
       </>:<>
         <div className="review-summary"><div><b>{review.counts.matched}</b><span>Matched VINs</span></div><div><b>{review.counts.changed}</b><span>Changed VINs</span></div><div><b>{review.counts.unchanged}</b><span>Unchanged</span></div><div><b>{review.counts.loadsCreated}</b><span>New load builds</span></div><div><b>{review.counts.built}</b><span>VINs on loads</span></div><div><b>{review.counts.pool}</b><span>Not load built</span></div></div>
+        {review.carrierChanges.length>0&&<div className="info-box"><div><strong>{review.carrierChanges.length} carrier assignment changes</strong><p>These VINs will move to {carrier.name}. Previous planned load links and truck plates are removed unless replaced by this sheet. Routes, dates, notes and packing lists are retained.</p><div className="preview-table"><table><thead><tr><th>VIN</th><th>Previous carrier</th><th>New carrier</th><th>Previous load</th></tr></thead><tbody>{review.carrierChanges.map(r=><tr key={r.vin}><td className="mono">{r.vin}</td><td>{r.before||'Unassigned'}</td><td>{r.after}</td><td>{r.load||'None'}</td></tr>)}</tbody></table></div><label className="remember-mapping"><input type="checkbox" checked={confirmed} onChange={e=>setConfirmed(e.target.checked)}/>Confirm assignment changes for all {review.carrierChanges.length} VINs</label></div></div>}
         <ScheduleRiskPreview risks={review.risks}/>{review.groups.length>0&&<div className="proposed-loads"><h3>Load groups to apply</h3>{review.groups.map(g=><div className="proposed-load" key={g.reference}><strong>{g.reference}</strong><span>{g.unitCount} VINs · {g.new?'Create load':'Use existing load'}</span></div>)}</div>}
         {review.counts.loadMoves>0&&<p className="import-warning">{review.counts.loadMoves} planned vehicle(s) will move from an existing load to the proposed group. Old load records remain in the load register.</p>}
         {review.counts.loadsReleased>0&&<p className="import-warning">{review.counts.loadsReleased} planned VIN(s) are now in the unassigned remainder and will be removed from their load. Their saved dates are kept. Departed and delivered load assignments are retained.</p>}
@@ -63,7 +65,7 @@ export default function CarrierUpdateDialog({projectId,carrier,units,onClose,onD
         <div className="preview-table changes-table sheet-table"><table><thead><tr><th>VIN</th><th>Status after update</th><th>Load after update</th><th>Changes</th>{columns.filter(([f])=>f!=='vin').map(([f,l])=><th key={f}>{l}</th>)}</tr></thead><tbody>{shown.map(r=><tr key={r.vin} className={r.classification==='pool'?'pool-row':''}><td className="mono vin-cell">{r.vin}</td><td><Badge stage={r.afterStatus}/></td><td><span className={`sheet-tag ${r.classification}`}>{r.loadAfter||'Not load built'}</span>{r.notice&&<p className="small muted">{r.notice}</p>}</td><td>{r.changes.length?<details className="change-details" open={r.changes.length<=3}><summary>{r.changes.length} field{r.changes.length===1?'':'s'} changed</summary>{r.changes.map(change=><div className="field-change" key={change.field}><b>{label(change.field)}</b><span>{display(change.field,change.before)} <ArrowRight size={12}/> {display(change.field,change.after)}</span></div>)}</details>:<span className="muted">No change</span>}</td>{columns.filter(([f])=>f!=='vin').map(([f])=><td className="sheet-cell" key={f}>{display(f,String(r.unit[f as keyof Unit]||''))}</td>)}</tr>)}</tbody></table></div>
       </>}
       {error&&<div className="error" role="alert">{error}</div>}
-      <div className="modal-footer">{review?<><button className="secondary" disabled={busy} onClick={()=>{setReview(null);setError('');}}>Back to paste</button><button className="primary" disabled={busy} onClick={apply}>{busy?'Applying…':`Apply update · ${review.counts.changed} changed`}<Check size={16}/></button></>:<><span>{preview.length} VINs detected</span><button className="primary" onClick={prepare} disabled={busy||!preview.length||preview.length>10000||invalid.length>0||!mapping.includes('vin')}>{busy?'Checking saved data…':'Review changes'}<ArrowRight size={16}/></button></>}</div>
+      <div className="modal-footer">{review?<><button className="secondary" disabled={busy} onClick={()=>{setReview(null);setError('');}}>Back to paste</button><button className="primary" disabled={busy||(review.carrierChanges.length>0&&!confirmed)} onClick={apply}>{busy?'Applying…':`Apply update · ${review.counts.changed} changed`}<Check size={16}/></button></>:<><span>{preview.length} VINs detected</span><button className="primary" onClick={prepare} disabled={busy||!preview.length||preview.length>10000||invalid.length>0||!mapping.includes('vin')}>{busy?'Checking saved data…':'Review changes'}<ArrowRight size={16}/></button></>}</div>
     </div>
   </Modal>;
 }

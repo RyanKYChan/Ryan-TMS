@@ -23,29 +23,55 @@ export function registerCarrierRoutes(app,db,{project,units,unitById,event,fail,
     if(!name)fail('Carrier name is required.');
     res.status(201).json(ensureCarrier(db,p,name));
   });
-  app.post('/api/projects/:p/carriers/:id/assign',(req,res)=>{
-    const p=project(req.params.p).id,c=carrierById(p,req.params.id),ids=req.body.unitIds;
+  const snapshotFor=p=>createHash('sha256').update(JSON.stringify({saved:units(p),loads:db.prepare('SELECT * FROM loads WHERE project_id=? ORDER BY created_at,id').all(p),rates:project(p)})).digest('hex');
+  function checkTransfer(u,c){
+    if(same(u.carrier,c.name))return;
+    if(['in_transit','delivered'].includes(status(u)))fail(`${u.vin} has already departed or arrived. Its carrier cannot be reassigned.`);
+    if(u.truck_visit_id)fail(`${u.vin} is linked to a truck visit. Edit its visit before changing its carrier.`);
+    const load=u.load_id&&db.prepare('SELECT * FROM loads WHERE id=?').get(u.load_id);
+    if(load&&(load.atd||load.ata))fail(`${u.vin} belongs to a departed load and cannot be reassigned.`);
+  }
+  function assignmentPlan(p,c,body){
+    const ids=body.unitIds;
     if(!Array.isArray(ids)||!ids.length||ids.length>10000||ids.some(id=>typeof id!=='string')||new Set(ids).size!==ids.length)fail('Select between 1 and 10,000 unique vehicles.');
     const selected=ids.map(id=>unitById(p,id));
-    for(const u of selected){
-      if(same(u.carrier,c.name))continue;
-      if(u.load_id)fail(`${u.vin} already belongs to a load. Change the load's carrier or remove this vehicle from the load first.`);
-      if(['in_transit','delivered'].includes(status(u)))fail(`${u.vin} has already departed or arrived. Correct its carrier in the vehicle details.`);
+    selected.forEach(u=>checkTransfer(u,c));
+    const rows=selected.filter(u=>!same(u.carrier,c.name)).map(u=>({id:u.id,vin:u.vin,before:u.carrier,after:c.name,load:u.load_id?db.prepare('SELECT reference FROM loads WHERE id=?').get(u.load_id).reference:'',truck:u.truck}));
+    return {rows,snapshot:snapshotFor(p),assigned:rows.length,unchanged:ids.length-rows.length};
+  }
+  function refreshLoads(ids){
+    for(const id of ids){
+      const members=db.prepare('SELECT * FROM units WHERE load_id=?').all(id);
+      if(!members.length)continue;
+      db.prepare(`UPDATE loads SET ${summaryFields.map(f=>`${f}=?`).join(',')} WHERE id=?`).run(...summaryFields.map(f=>common(members,f)),id);
+      db.prepare("UPDATE loads SET capacity=? WHERE id=? AND notes='Created from carrier sheet groups'").run(members.length,id);
     }
-    let assigned=0;
-    transaction(db,()=>{for(const u of selected){
-      if(u.carrier===c.name)continue;
-      db.prepare('UPDATE units SET carrier=?,updated_at=? WHERE id=?').run(c.name,now(),u.id);
-      event(p,u.id,`Assigned ${u.vin} to carrier ${c.name}`);assigned++;
-    }});
-    res.json({assigned,unchanged:ids.length-assigned});
+  }
+  app.post('/api/projects/:p/carriers/:id/assign/preview',(req,res)=>{
+    const p=project(req.params.p).id,c=carrierById(p,req.params.id);res.json(assignmentPlan(p,c,req.body));
+  });
+  app.post('/api/projects/:p/carriers/:id/assign',(req,res)=>{
+    const p=project(req.params.p).id,c=carrierById(p,req.params.id);
+    const result=transaction(db,()=>{
+      const review=assignmentPlan(p,c,req.body);
+      if(req.body.snapshot&&req.body.snapshot!==review.snapshot)fail('Saved data changed. Review the assignment again.',409);
+      if(review.rows.some(r=>r.before||r.load)&&(req.body.confirmCarrierChanges!==true||req.body.snapshot!==review.snapshot))fail('Review and confirm the carrier assignment changes first.',409);
+      const affected=new Set();
+      for(const row of review.rows){
+        const u=unitById(p,row.id);if(u.load_id)affected.add(u.load_id);
+        db.prepare('UPDATE units SET carrier=?,load_id=NULL,truck=?,updated_at=? WHERE id=?').run(c.name,u.carrier||u.load_id?'':u.truck,now(),u.id);
+        event(p,u.id,`Carrier assignment: ${row.before||'Unassigned'} → ${c.name}${row.load?`; removed from load ${row.load}`:''}${row.truck&&(row.before||row.load)?`; cleared truck ${row.truck}`:''}. Route, dates and notes retained.`);
+      }
+      refreshLoads(affected);
+      return {assigned:review.assigned,unchanged:review.unchanged};
+    });res.json(result);
   });
 
   // Both preview and apply run this planner against saved data; the preview fingerprint
   // prevents a later paste from silently overwriting changes made after review.
   function plan(p,c,body){
     const saved=units(p),loads=db.prepare('SELECT * FROM loads WHERE project_id=? ORDER BY created_at,id').all(p);
-    const snapshot=createHash('sha256').update(JSON.stringify({saved,loads,rates:project(p)})).digest('hex');
+    const snapshot=snapshotFor(p);
     const incoming=body.rows;
     if(!Array.isArray(incoming)||!incoming.length||incoming.length>10000)fail('Paste between 1 and 10,000 rows.');
     if(typeof body.groupLoads!=='boolean')fail('Choose whether to apply load groups.');
@@ -55,8 +81,9 @@ export function registerCarrierRoutes(app,db,{project,units,unitById,event,fail,
       const vin=cleanVin(r.vin),error=validateVin(vin);if(error)fail(`Row ${i+1}: ${error}`);
       if(seen.has(vin))fail(`Row ${i+1}: duplicate VIN ${vin}.`);seen.add(vin);
       const old=byVin.get(vin);if(!old)fail(`${vin} is not in this project's packing lists. Import it before updating a carrier.`);
-      if(!same(old.carrier,c.name))fail(`${vin} is not assigned to ${c.name}. Assign it from the unit register first.`);
-      const update={};
+      checkTransfer(old,c);
+      const transferring=!same(old.carrier,c.name);
+      const update=transferring?{carrier:c.name,...(old.truck&&(old.carrier||old.load_id)?{truck:''}:{})}:{};
       for(const f of FIELDS){
         if(f==='vin'||r[f]===undefined||r[f]==='')continue;
         const value=text(r[f],f==='notes'?2000:500);
@@ -68,7 +95,7 @@ export function registerCarrierRoutes(app,db,{project,units,unitById,event,fail,
       const action=body.groupLoads?text(r.load_action??'',20):'';
       if(action&&!['pool'].includes(action))fail(`${vin}: choose a load group or the unassigned pool.`);
       if(action&&(r.group||r.load_reference))fail(`${vin}: a vehicle cannot be in a load group and the unassigned pool.`);
-      return {old,update,action,group:body.groupLoads?text(r.group??'',100):'',reference:body.groupLoads?text(r.load_reference??'',100):''};
+      return {old,update,transferring,action,group:body.groupLoads?text(r.group??'',100):'',reference:body.groupLoads?text(r.load_reference??'',100):''};
     });
     const grouped=new Map();
     for(const r of planned){
@@ -123,7 +150,7 @@ export function registerCarrierRoutes(app,db,{project,units,unitById,event,fail,
     }
     const rows=planned.map(r=>{
       const protectedLoad=r.action==='pool'&&r.old.load_id&&['in_transit','delivered'].includes(status({...r.old,...r.update}));
-      const release=r.action==='pool'&&r.old.load_id&&!protectedLoad;
+      const release=r.old.load_id&&(r.transferring||r.action==='pool'&&!protectedLoad);
       const before=r.old.load_ref||'',after=r.loadGroup?.reference||(release?'':before);
       r.release=release;
       const finalUnit={...r.old,...r.update,load_id:r.loadGroup?'proposed':release?null:r.old.load_id,load_ref:after||null};
@@ -132,7 +159,7 @@ export function registerCarrierRoutes(app,db,{project,units,unitById,event,fail,
       return {vin:r.old.vin,unitId:r.old.id,unit:finalUnit,changes,beforeStatus:status(r.old),afterStatus:status(finalUnit),loadBefore:before,loadAfter:after,notice:protectedLoad?'Existing departed/delivered load retained.':'',classification:after?'load':'pool'};
     });
     const risks=planned.flatMap((r,i)=>scheduleChanges(r.old,r.update).map(change=>({...change,vin:r.old.vin,unit_id:r.old.id,load_reference:rows[i].loadAfter||rows[i].loadBefore,carrier:c.name})));
-    return {planned,groups,rows,snapshot,risks,counts:{matched:rows.length,changed:rows.filter(r=>r.changes.length).length,unchanged:rows.filter(r=>!r.changes.length).length,loadsCreated:groups.filter(g=>g.new).length,loadMoves:rows.filter(r=>r.loadBefore&&r.loadAfter&&r.loadBefore!==r.loadAfter).length,loadsReleased:rows.filter(r=>r.loadBefore&&!r.loadAfter).length,built:rows.filter(r=>r.loadAfter).length,pool:rows.filter(r=>!r.loadAfter).length}};
+    return {planned,groups,rows,snapshot,risks,carrierChanges:planned.filter(r=>r.transferring).map(r=>({vin:r.old.vin,before:r.old.carrier,after:c.name,load:r.old.load_ref||'',truck:r.old.truck})),counts:{matched:rows.length,changed:rows.filter(r=>r.changes.length).length,unchanged:rows.filter(r=>!r.changes.length).length,loadsCreated:groups.filter(g=>g.new).length,loadMoves:rows.filter(r=>r.loadBefore&&r.loadAfter&&r.loadBefore!==r.loadAfter).length,loadsReleased:rows.filter(r=>r.loadBefore&&!r.loadAfter).length,built:rows.filter(r=>r.loadAfter).length,pool:rows.filter(r=>!r.loadAfter).length}};
   }
   app.post('/api/projects/:p/carriers/:id/updates/preview',(req,res)=>{
     const p=project(req.params.p).id,c=carrierById(p,req.params.id),result=plan(p,c,req.body);
@@ -143,6 +170,7 @@ export function registerCarrierRoutes(app,db,{project,units,unitById,event,fail,
     const result=transaction(db,()=>{
       const result=plan(p,c,req.body);
       if(req.body.snapshot!==result.snapshot)fail('Saved data changed since your preview. Review the paste again before applying it.',409);
+      if(result.carrierChanges.length&&req.body.confirmCarrierChanges!==true)fail('Confirm the carrier assignment changes before applying this sheet.',409);
       const {planned,groups,rows,counts}=result,t=now();
       for(const g of groups){
         if(!g.new)continue;
