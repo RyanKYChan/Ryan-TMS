@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, openSync, closeSync, readFileSync, unlinkSync, w
 import { dirname, resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { backupDirectory } from './storage-paths.js';
-export const SCHEMA_VERSION=1;
+export const SCHEMA_VERSION=2;
 export function acquireDatabaseLock(filename){
   mkdirSync(dirname(filename),{recursive:true});
   const lock=filename+'.lock';

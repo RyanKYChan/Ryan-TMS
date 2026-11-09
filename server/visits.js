@@ -129,7 +129,7 @@ export function registerVisitRoutes(app,db,{project,event,fail,text,now}){
       if(old){for(const f of Object.keys(base))if(old[f])base[f]=old[f];}Object.assign(base,update);base.carrier=v.carrier;base.truck=v.truck;
       const e=validateUnit({...old,...base});if(e)fail(`${update.vin}: ${e}`);return {old,update:base};
     });
-    const result=transaction(db,()=>{let list=db.prepare('SELECT id FROM packing_lists WHERE project_id=? AND name=?').get(p.id,'Post-strip VINs');if(!list){list={id:randomUUID()};db.prepare('INSERT INTO packing_lists VALUES(?,?,?,?)').run(list.id,p.id,'Post-strip VINs',now());}
+    const result=transaction(db,()=>{let list=db.prepare('SELECT id FROM packing_lists WHERE project_id=? AND name=?').get(p.id,'Post-strip VINs');if(!list){list={id:randomUUID()};db.prepare('INSERT INTO packing_lists(id,project_id,name,created_at) VALUES(?,?,?,?)').run(list.id,p.id,'Post-strip VINs',now());}
       let added=0,updated=0,order=db.prepare('SELECT coalesce(max(import_order),0) AS n FROM units WHERE project_id=?').get(p.id).n;
       for(const {old,update} of plan){if(old){const entries=Object.entries(update).filter(([f])=>f!=='vin');db.prepare(`UPDATE units SET truck_visit_id=?,${entries.map(([f])=>`${f}=?`).join(',')},updated_at=? WHERE id=?`).run(v.id,...entries.map(([,value])=>value),now(),old.id);updated++;}
         else{const id=randomUUID(),t=now();db.prepare(`INSERT INTO units(id,project_id,${FIELDS.join(',')},packing_list_id,truck_visit_id,created_at,updated_at,import_order) VALUES(${Array(FIELDS.length+7).fill('?').join(',')})`).run(id,p.id,...FIELDS.map(f=>update[f]??''),list.id,v.id,t,t,++order);added++;}}

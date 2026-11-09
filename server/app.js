@@ -1,3 +1,4 @@
+import { packingListSummary, registerPackingListRoutes } from './packing-lists.js';
 import { registerFinanceRoutes } from './finance.js';
 import { registerVisitRoutes, visitSummary } from './visits.js';
 import express from 'express';
@@ -17,7 +18,7 @@ export function createApp(db) {
     return {...p,estimated_target:p.target,imported_count,target:p.volume_mode==='packing_list'?imported_count:p.target};
   };
   const project = id => projectSummary(db.prepare('SELECT * FROM projects WHERE id=?').get(id) || fail('Project not found.',404));
-  const event = (p, u, description,visitId=null) => db.prepare('INSERT INTO events(id,project_id,unit_id,description,created_at,truck_visit_id) VALUES(?,?,?,?,?,?)').run(randomUUID(),p,u,description,now(),visitId);
+  const event = (p, u, description,visitId=null,listId=null) => db.prepare('INSERT INTO events(id,project_id,unit_id,description,created_at,truck_visit_id,packing_list_id) VALUES(?,?,?,?,?,?,?)').run(randomUUID(),p,u,description,now(),visitId,listId??(u?db.prepare('SELECT packing_list_id FROM units WHERE id=?').get(u)?.packing_list_id:null)??null);
   const text = (v, max=500) => typeof v === 'string' && v.length <= max ? v.trim() : fail(`Text must be at most ${max} characters.`);
   const count = (v,min,max) => Number.isInteger(v) && v>=min && v<=max ? v : fail(`Enter a whole number between ${min} and ${max}.`);
   const units = p => db.prepare(`SELECT u.*, pl.name AS packing_list, l.reference AS load_ref FROM units u
@@ -56,10 +57,11 @@ export function createApp(db) {
       db.prepare('DELETE FROM projects WHERE id=?').run(p.id);
     });res.json({deleted:p.id});
   });
+  registerPackingListRoutes(app,db,{project,text,fail,event});
   app.get('/api/projects/:p/workspace', (req,res) => {
     const p=project(req.params.p);
     res.json({truckVisits:db.prepare('SELECT v.*,c.name AS carrier FROM truck_visits v JOIN carriers c ON c.id=v.carrier_id WHERE v.project_id=? ORDER BY v.pickup_date,v.pickup_time,v.created_at').all(p.id).map(visitSummary),truckBank:db.prepare('SELECT t.*,c.name AS carrier FROM project_trucks t JOIN carriers c ON c.id=t.carrier_id WHERE t.project_id=? ORDER BY c.name,t.truck,t.driver').all(p.id),project:p,units:units(p.id),loads:db.prepare('SELECT * FROM loads WHERE project_id=? ORDER BY created_at DESC').all(p.id),
-      packingLists:db.prepare('SELECT * FROM packing_lists WHERE project_id=? ORDER BY created_at DESC').all(p.id),
+      packingLists:db.prepare('SELECT * FROM packing_lists WHERE project_id=? ORDER BY created_at DESC').all(p.id).map(packingListSummary),
       carriers:db.prepare(`SELECT c.*, (SELECT max(created_at) FROM carrier_updates WHERE carrier_id=c.id) AS last_update FROM carriers c WHERE project_id=? ORDER BY name`).all(p.id),
       carrierUpdates:db.prepare('SELECT * FROM carrier_updates WHERE project_id=? ORDER BY created_at DESC LIMIT 100').all(p.id),
       scheduleAlerts:db.prepare('SELECT a.*, c.name AS carrier FROM schedule_alerts a JOIN carriers c ON c.id=a.carrier_id WHERE a.project_id=? ORDER BY a.created_at DESC,a.rowid DESC').all(p.id),
@@ -86,7 +88,7 @@ export function createApp(db) {
     });
     const result=transaction(db,()=>{
       let list=db.prepare('SELECT * FROM packing_lists WHERE project_id=? AND name=?').get(p,name);
-      if(!list) { list={id:randomUUID()}; db.prepare('INSERT INTO packing_lists VALUES(?,?,?,?)').run(list.id,p,name,now()); }
+      if(!list) { list={id:randomUUID()}; db.prepare('INSERT INTO packing_lists(id,project_id,name,created_at) VALUES(?,?,?,?)').run(list.id,p,name,now()); }
       let added=0,updated=0;
       let nextOrder=db.prepare('SELECT coalesce(max(import_order),0) AS n FROM units WHERE project_id=?').get(p).n;
       for(const {u,old} of normalized) {

@@ -338,3 +338,24 @@ test('A pasted sheet previews all carrier changes, requires confirmation, applie
   assert.equal((await f.request(path+'/preview','POST',{groupLoads:false,rows:[{vin:vin(3)}]})).status,400);
   const repeat=await f.request(path+'/preview','POST',body);assert.equal(repeat.data.carrierChanges.length,0);assert.equal(repeat.data.counts.changed,0);
 });
+
+test('Packing-list priority and hold planning are validated, project-scoped, concurrency checked and retained on re-import',async t=>{
+  const f=await fixture(t);await f.importRows([{vin:vin(1),notes:'Keep operational details',carrier:'Original carrier'}],'Priority list');
+  let w=await f.workspace(),list=w.packingLists[0];const before=w.units,loads=w.loads,path=`/api/projects/${f.p}/packing-lists/${list.id}`;
+  assert.equal(list.priority,'normal');assert.equal(list.planning_state,'active');
+  for(const changes of [{priority:'invalid'},{planning_state:'on_hold'},{review_date:'2026-02-31'},{review_date:'not a date'},{objective:'a'.repeat(2001)},{name:'Overwrite name'},{review_date:42}])assert.equal((await f.request(path,'PATCH',{snapshot:list.snapshot,...changes})).status,400);
+  let r=await f.request(path,'PATCH',{snapshot:list.snapshot,priority:'urgent',planning_state:'on_hold',hold_reason:'Awaiting client contract for onward transport or storage',objective:'Transfer to approved storage once contracted',next_action:'Ask the client to confirm the contract',review_date:'2026-11-12'});assert.equal(r.status,200,JSON.stringify(r.data));
+  w=await f.workspace();assert.deepEqual(w.units,before);assert.deepEqual(w.loads,loads);assert.equal(w.packingLists[0].priority,'urgent');assert.equal(w.packingLists[0].planning_state,'on_hold');
+  assert.equal((await f.request(path,'PATCH',{snapshot:list.snapshot,priority:'normal'})).status,409);
+  const {data:other}=await f.request('/api/projects','POST',{name:'Other project'});assert.equal((await f.request(`/api/projects/${other.id}/packing-lists/${list.id}`)).status,404);assert.equal((await f.request(`/api/projects/${other.id}/packing-lists/${list.id}/activity`)).status,404);
+  const activity=await f.request(path+'/activity');assert.equal(activity.data[0].packing_list_id,list.id);assert.match(activity.data[0].description,/Awaiting client contract/);
+  await f.importRows([{vin:vin(1),model:'Updated model'},{vin:vin(2)}],'Priority list');w=await f.workspace();assert.equal(w.packingLists.length,1);assert.equal(w.packingLists[0].planning_state,'on_hold');assert.equal(w.packingLists[0].hold_reason,'Awaiting client contract for onward transport or storage');assert.equal(w.units[0].carrier,'Original carrier');
+  list=w.packingLists[0];assert.equal((await f.request(path,'PATCH',{snapshot:list.snapshot,planning_state:'active',hold_reason:'',next_action:'Book confirmed transport'})).status,200);assert.equal((await f.workspace()).packingLists[0].planning_state,'active');
+});
+test('List activity is independent of the project event limit and keeps events with their original list after a VIN moves',async t=>{
+  const f=await fixture(t);await f.importRows([{vin:vin(1)}],'Original list');const original=(await f.workspace()).packingLists[0];
+  await f.importRows(Array.from({length:80},(_,i)=>({vin:vin(i+2)})),'Other list');const w=await f.workspace();assert.equal(w.events.length,50);
+  const path=`/api/projects/${f.p}/packing-lists/${original.id}/activity`;let r=await f.request(path);assert.equal(r.data.length,1);assert.equal(r.data[0].vin,vin(1));
+  await f.importRows([{vin:vin(1)}],'Other list');r=await f.request(path);assert.equal(r.data.length,1);assert.match(r.data[0].description,/Original list/);
+  const other=(await f.workspace()).packingLists.find(l=>l.name==='Other list');r=await f.request(`/api/projects/${f.p}/packing-lists/${other.id}/activity`);assert.equal(r.data.length,30);assert.ok(r.data.every(e=>e.packing_list_id===other.id));
+});

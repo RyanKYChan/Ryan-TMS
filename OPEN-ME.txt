@@ -1,4 +1,4 @@
-RYAN TMS v0.10.0 - Open the dashboard on your Windows computer
+RYAN TMS v0.11.0 - Open the dashboard on your Windows computer
 
 1. Install Node.js version 24 from https://nodejs.org if you do not have it.
 2. Extract the entire ZIP file to a folder on your computer.
@@ -38,6 +38,25 @@ The dashboard includes:
 - Assign / change carrier: allocate 200 VINs or any selected batch at once.
 - Carriers: a separate workspace for each carrier and a progress comparison.
 - Paste sheet update: preview changed milestones and gap-based load builds.
+
+PACKING-LIST PRIORITIES AND DASHBOARDS (v0.11.0)
+Open Packing lists, then Open dashboard for the batch you need to focus on.
+The list dashboard has its own movement pipeline, planning gaps, carrier progress,
+load membership, upcoming movements, actual milestones and recent activity.
+Click any count to work with the corresponding VINs in the register.
+Export this list exports that list only. Shared loads show your list's share;
+opening a whole shared load can affect VINs from other lists too.
+
+Edit priority & planning to set priority, onward objective, hold reason, next
+step and a review date. Example: On hold - awaiting client contract for onward
+transport or storage. Record the next client decision and a review date so a
+stationary batch has an explicit explanation. The project overview surfaces
+priority lists and holds. A hold does not change saved VIN stages or movements.
+
+If you already use v0.10, close it and launch this update. The same permanent
+database is used; a full safety backup is created before the schema upgrade.
+Use v0.11 or later afterward: v0.10 refuses the newer schema.
+If upgrading from an older app-folder database, follow the import steps below.
 
 UPDATING / FIRST-TIME DATABASE IMPORT
 1. Close all previous Ryan-TMS command windows.

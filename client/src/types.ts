@@ -9,7 +9,7 @@ export type Unit = {
   created_at:string; updated_at:string; import_order:number;
 };
 export type Load = {id:string;project_id:string;reference:string;carrier:string;truck:string;driver:string;capacity:number;origin:string;destination:string;etd:string;eta:string;notes:string;cost:string;revenue:string;created_at:string};
-export type PackingList = {id:string;name:string;created_at:string};
+export type PackingList = {id:string;name:string;created_at:string;priority:'normal'|'high'|'urgent';planning_state:'active'|'on_hold';objective:string;hold_reason:string;next_action:string;review_date:string;snapshot:string};
 export type Event = {id:string;unit_id:string|null;truck_visit_id:string|null;description:string;created_at:string};
 export type Carrier = {id:string;project_id:string;name:string;created_at:string;last_update:string|null;contact_name:string;contact_phone:string;contact_email:string;notes:string};
 export type CarrierUpdate = {id:string;carrier_id:string;row_count:number;changed_count:number;loads_created:number;created_at:string};

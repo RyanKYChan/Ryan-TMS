@@ -10,13 +10,13 @@ import express from 'express';
 import { openDb } from '../server/db.js';
 import { createStorage } from '../server/storage.js';
 import { databasePath } from '../server/storage-paths.js';
-import { inspectDatabase } from '../server/database-safety.js';
+import { inspectDatabase, SCHEMA_VERSION } from '../server/database-safety.js';
 const vin='LSFAM11A1RA000001';
 function temp(t){const path=mkdtempSync(join(tmpdir(),'ryan-storage-'));t.after(()=>rmSync(path,{recursive:true,force:true}));return path;}
 function seed(filename){
   const db=openDb(filename),p=db.prepare('SELECT id FROM projects').get().id;
   db.prepare("UPDATE projects SET name='Real operations',yard='Kallo',destination='Zeebrugge' WHERE id=?").run(p);
-  db.prepare("INSERT INTO packing_lists VALUES('pl',?,'Operational packing list','2026-01-01')").run(p);
+  db.prepare("INSERT INTO packing_lists(id,project_id,name,created_at) VALUES('pl',?,'Operational packing list','2026-01-01')").run(p);
   db.prepare("INSERT INTO carriers(id,project_id,name,created_at,contact_phone) VALUES('carrier',?,'Carrier A','2026-01-01','0123')").run(p);
   db.prepare("INSERT INTO loads(id,project_id,reference,carrier,created_at,cost) VALUES('load',?,'Load 1','Carrier A','2026-01-01','100')").run(p);
   db.prepare("INSERT INTO units(id,project_id,vin,carrier,packing_list_id,load_id,notes,atd,created_at,updated_at) VALUES('unit',?,?,'Carrier A','pl','load','Saved notes','2026-10-10T10:00:00Z','2026-01-01','2026-01-01')").run(p,vin);
@@ -41,7 +41,7 @@ test('Persistent Windows path does not depend on extraction folder or current di
 test('Versioned legacy upgrade creates a consistent pre-migration backup and preserves operational records',t=>{
   const dir=temp(t),path=join(dir,'data/tms.sqlite');seed(path);
   const old=new DatabaseSync(path);old.exec('PRAGMA user_version=0; ALTER TABLE projects DROP COLUMN destination;');old.close();
-  const upgraded=openDb(path);assert.equal(upgraded.prepare('PRAGMA user_version').get().user_version,1);
+  const upgraded=openDb(path);assert.equal(upgraded.prepare('PRAGMA user_version').get().user_version,SCHEMA_VERSION);
   assert.equal(upgraded.prepare('SELECT notes FROM units').get().notes,'Saved notes');assert.equal(upgraded.prepare('SELECT description FROM events').get().description,'Operational history');upgraded.close();
   const backups=readdirSync(join(dir,'data/backups'));assert.equal(backups.length,1);
   const backup=new DatabaseSync(join(dir,'data/backups',backups[0]),{readOnly:true});assert.equal(backup.prepare('PRAGMA user_version').get().user_version,0);assert.equal(backup.prepare('SELECT vin FROM units').get().vin,vin);backup.close();
@@ -101,4 +101,15 @@ test('A second process is blocked, and an abruptly closed process lock can be re
   const child=spawn(process.execPath,['--input-type=module','-e',`import {openDb} from ${JSON.stringify(moduleUrl)};const db=openDb(process.argv[1]);console.log('locked');setInterval(()=>{},1000);`,path],{stdio:['ignore','pipe','pipe']});
   try{await once(child.stdout,'data');assert.throws(()=>openDb(path),/already using/);}finally{child.kill('SIGKILL');await once(child,'exit');}
   assert.ok(existsSync(path+'.lock'));const db=openDb(path);assert.equal(db.prepare('SELECT vin FROM units').get().vin,vin);db.close();assert.equal(existsSync(path+'.lock'),false);
+});
+
+test('v0.10 schema migration backs up before adding list planning, preserves all records and persists planning across restarts',async t=>{
+  const dir=temp(t),path=join(dir,'data/tms.sqlite');seed(path);
+  const old=new DatabaseSync(path);old.exec("PRAGMA user_version=1; ALTER TABLE events DROP COLUMN packing_list_id;");
+  for(const col of ['priority','planning_state','objective','hold_reason','next_action','review_date'])old.exec(`ALTER TABLE packing_lists DROP COLUMN ${col}`);
+  const records=old.prepare('SELECT * FROM units').all();old.close();
+  let db=openDb(path);assert.equal(db.prepare('PRAGMA user_version').get().user_version,2);assert.deepEqual(db.prepare('SELECT * FROM units').all(),records);const list=db.prepare('SELECT * FROM packing_lists').get();assert.equal(list.priority,'normal');assert.equal(list.planning_state,'active');assert.equal(db.prepare('SELECT count(*) AS n FROM events').get().n,1);
+  db.exec("UPDATE packing_lists SET priority='urgent',planning_state='on_hold',hold_reason='Awaiting contract',next_action='Contact client',review_date='2026-11-12'");db.close();
+  const name=readdirSync(join(dir,'data/backups')).find(n=>n.includes('before-schema-2'));assert.ok(name);const backup=new DatabaseSync(join(dir,'data/backups',name));assert.equal(backup.prepare('PRAGMA user_version').get().user_version,1);assert.ok(!backup.prepare('PRAGMA table_info(packing_lists)').all().some(c=>c.name==='priority'));backup.close();
+  db=openDb(path);assert.equal(db.prepare('SELECT hold_reason FROM packing_lists').get().hold_reason,'Awaiting contract');assert.deepEqual(db.prepare('SELECT * FROM units').all(),records);db.close();
 });

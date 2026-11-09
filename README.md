@@ -4,7 +4,7 @@ A mini TMS for vehicle spot transport and shunting, starting with a Maxus projec
 
 ## Open it on your Windows computer
 
-[Download the v0.10.0 Windows ZIP](https://github.com/RyanKYChan/Ryan-TMS/raw/refs/heads/main/downloads/ryan-tms-windows-v0.10.0.zip)
+[Download the v0.11.0 Windows ZIP](https://github.com/RyanKYChan/Ryan-TMS/raw/refs/heads/main/downloads/ryan-tms-windows-v0.11.0.zip)
 
 ChatGPT's cloud environment page does not expose the web app. The server must run on your own computer, or the app needs a separate hosted deployment. Opening the HTML files directly does not start the API.
 
@@ -21,6 +21,18 @@ On the first launch, choose **Import Existing Database**, select your most recen
 For a genuinely new installation only, expand **Start without an existing database** and type NEW. The app never chooses a new empty database on your behalf. If a previously initialized database is missing, corrupt, locked or incompatible, startup stops with an error rather than resetting it.
 
 For every later update: close the app, download/extract anywhere, launch. The same persistent database opens automatically. Do not run an old release against the shared database: releases before v0.10.0 use their own legacy app-folder databases and cannot understand the new storage safeguards. Database schema versions prevent this and later releases from opening a newer incompatible schema; a process lock prevents simultaneous supported instances. An unclean exit is recovered automatically when its lock owner no longer exists.
+
+## Packing-list priorities and focused dashboards (v0.11.0)
+
+Open **Packing lists** for a priority-sorted overview, or use **Packing-list focus** on the project overview. Choose **Open dashboard** for a batch to isolate its movement pipeline, carrier progress, load membership, upcoming pickups/deliveries, actual movements and recent activity. Every count and percentage uses only that list's current VINs, including lists that become empty after a re-import moves their VINs elsewhere.
+
+**Edit priority & planning** saves Normal / High / Urgent priority, an onward objective, Open / On hold state, the hold reason, next action and a review date. For a batch sitting at the terminal without a signed contract, choose **On hold**, select **Awaiting client contract for onward transport or storage**, and record what the client needs to confirm and when you will review it. Priority batches and holds are visible on the project overview. Holds explain the current situation; they do not rewrite VIN statuses, dates, carrier allocations or loads. Passed ETDs/ETAs and missing actual milestones remain visible.
+
+The pipeline shows Unscheduled → Scheduled → Ready to go → In transit → Delivered using the existing saved-milestone / sheet-status rules. Actual timestamps are counted separately so a sheet-reported delivery without ATA is still visible as missing an actual date. No movement is invented for stationary VINs. Empty objectives, next actions and dates are explicitly shown as unrecorded.
+
+Click a stage, carrier, load membership, upcoming movement or follow-up count to open exactly those VINs in the register. Stage tabs and **Select all matching vehicles** retain the list scope; existing bulk carrier reassignment and editing remain available. **Back to list dashboard** returns to the same batch. **Export this list** exports only its VINs. Shared loads show, for example, “2 of 6 VINs belong to this list”; opening the full load may affect all its members, so use **View list VINs** for selection scoped to the batch.
+
+List planning survives reloads, database restarts and repeat imports under the same packing-list name. Edits made after a planning form was opened require **Reload saved details** before saving. Activity is fetched for the list separately from the project-wide event limit. Schema 2 adds planning fields and list event links, with an automatic backup of schema 1 before migration. An older v0.10 app refuses this newer schema; use v0.11 or later after upgrading.
 
 ## Bulk VIN / carrier changes (v0.10.0)
 
